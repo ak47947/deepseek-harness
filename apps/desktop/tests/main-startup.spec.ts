@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import type { MenuItemConstructorOptions, MessageBoxOptions } from 'electron'
 import { DESKTOP_IPC, type DesktopUpdateState } from '../src/ipc.ts'
+import { WELCOME_IPC } from '../src/welcome-api.ts'
 import { MANDATORY_IPC } from '../src/mandatory-update-ipc.ts'
 import { DesktopHostFatalError, DesktopHostUncleanExitError } from '../src/host-process.ts'
 import { en, zh } from '../src/locale.ts'
@@ -121,6 +122,11 @@ const harness = await vi.hoisted(async () => {
       this.webContents.mainFrame.url = url
       if (url === 'dsh-app://app/') navigated.resolve()
     }
+    async loadFile(path: string) {
+      const url = `file://${path}`
+      this.urls.push(url)
+      this.webContents.mainFrame.url = url
+    }
     static getAllWindows() { return windows.filter(window => !window.destroyed) }
     setMenu() {}
     getContentBounds() { return { x: 0, y: 0, width: 900, height: 650 } }
@@ -175,6 +181,8 @@ const harness = await vi.hoisted(async () => {
     getVersion: () => '1.0.0',
     getAppPath: (): string => 'desktop-test-app',
     setAppLogsPath: vi.fn(),
+    setName: vi.fn(),
+    setPath: vi.fn(),
     getPath: vi.fn<(name: string) => string>(),
     setAboutPanelOptions: vi.fn<(options: Electron.AboutPanelOptionsOptions) => void>(),
     requestSingleInstanceLock: () => true,
@@ -293,36 +301,51 @@ vi.mock('../src/policy-test-auth.ts', () => ({ DesktopPolicyTestAuth: class {
   readonly request: typeof fetch = (input, init) => fetch(input, init)
 } }))
 
-vi.mock('electron', () => ({
-  app: harness.app,
-  BrowserWindow: harness.FakeWindow,
-  WebContentsView: harness.FakeView,
-  dialog: harness.dialog,
-  shell: { openExternal: harness.openExternal },
-  nativeTheme: harness.nativeTheme,
-  net: { fetch: vi.fn() },
-  ipcMain: {
-    on: harness.ipcOn,
-    handle: (channel: string, handler: InvokeHandler) => {
-      if (harness.handlers.has(channel)) throw new Error(`duplicate IPC handler ${channel}`)
-      harness.handlers.set(channel, handler)
+vi.mock('electron', () => {
+  const browserSession = {
+    protocol: { handle: harness.protocolHandle }, fetch: vi.fn(),
+    clearStorageData: vi.fn(async () => {}), clearCache: vi.fn(async () => {}),
+    setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn(),
+    webRequest: { onBeforeSendHeaders: harness.socketHeaders },
+  }
+  return ({
+    app: harness.app,
+    BrowserWindow: harness.FakeWindow,
+    WebContentsView: harness.FakeView,
+    dialog: harness.dialog,
+    shell: { openExternal: harness.openExternal },
+    nativeTheme: harness.nativeTheme,
+    net: { fetch: vi.fn() },
+    ipcMain: {
+      on: harness.ipcOn,
+      handle: (channel: string, handler: InvokeHandler) => {
+        if (harness.handlers.has(channel)) throw new Error(`duplicate IPC handler ${channel}`)
+        harness.handlers.set(channel, handler)
+      },
+      removeHandler: (channel: string) => { harness.handlers.delete(channel) },
     },
-    removeHandler: (channel: string) => { harness.handlers.delete(channel) },
-  },
-  Menu: { setApplicationMenu: harness.menu.setApplicationMenu, buildFromTemplate: harness.menu },
-  session: { defaultSession: {
-    setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn(), webRequest: { onBeforeSendHeaders: harness.socketHeaders },
-  } },
-  protocol: { registerSchemesAsPrivileged: vi.fn(), handle: harness.protocolHandle },
-  powerMonitor: harness.powerMonitor,
-  Tray: harness.FakeTray,
-  nativeImage: { createFromPath: (path: string) => ({ path }) },
-}))
+    Menu: { setApplicationMenu: harness.menu.setApplicationMenu, buildFromTemplate: harness.menu },
+    session: { defaultSession: browserSession, fromPartition: () => browserSession },
+    protocol: { registerSchemesAsPrivileged: vi.fn(), handle: harness.protocolHandle },
+    powerMonitor: harness.powerMonitor,
+    Tray: harness.FakeTray,
+    nativeImage: { createFromPath: (path: string) => ({ path }) },
+  })
+})
 vi.mock('../src/background-notice.ts', () => ({ DesktopBackgroundNotice: class {
   constructor(options: { markerPath: string }) { harness.backgroundNotice.markerPath = options.markerPath }
   readonly close = harness.backgroundNotice.close
   readonly dispose = harness.backgroundNotice.dispose
 } }))
+vi.mock('node:fs', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:fs')>()
+  return { ...original, readFileSync: vi.fn((...args: Parameters<typeof original.readFileSync>) => {
+    if (args[0] === join('desktop-test-app', 'package.json')) {
+      return JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy })
+    }
+    return original.readFileSync(...args)
+  }) }
+})
 vi.mock('node:fs/promises', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:fs/promises')>()
   return { ...original, readFile: vi.fn((path: Parameters<typeof original.readFile>[0], encoding?: 'utf8') => {
@@ -442,6 +465,7 @@ beforeEach(() => {
   vi.stubGlobal('process', { ...process, platform: 'win32', arch: 'x64', resourcesPath: 'desktop-test-resources' })
   vi.stubEnv('DSH_DESKTOP_HOST_INSPECT_PORT', undefined)
   vi.stubEnv('DSH_DESKTOP_DEV_PROJECT_DIR', undefined)
+  vi.stubEnv('DSH_DESKTOP_ENTERPRISE_CONFIG', undefined)
   vi.stubEnv('DSH_DESKTOP_MANDATORY_UPDATE_CONFIG', undefined)
   vi.stubEnv('DSH_DESKTOP_UPDATE_JOURNAL_DIR', undefined)
   vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
@@ -464,6 +488,44 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it('refuses enterprise welcome skip without constructing or starting a Host', async () => {
+    harness.app.isPackaged = false
+    vi.stubEnv('DSH_DESKTOP_ENTERPRISE_CONFIG', JSON.stringify({
+      appId: 'test.enterprise.desktop', productName: 'Enterprise test', origin: 'https://enterprise.example.test',
+    }))
+    const { DesktopEnterpriseSession } = await import('../src/enterprise-session.ts')
+    vi.spyOn(DesktopEnterpriseSession.prototype, 'restore').mockResolvedValue(false)
+    await import('../src/main.ts')
+    await vi.waitFor(() => { expect(harness.handlers.has(WELCOME_IPC.skip)).toBe(true) })
+    const sender = harness.windows[0]!.webContents
+    await expect(harness.handlers.get(WELCOME_IPC.skip)!({ sender, senderFrame: sender.mainFrame }))
+      .rejects.toThrow('sign in before opening a workspace')
+    expect(harness.hosts).toHaveLength(0)
+  })
+
+  it.each(['darwin', 'win32'])('keeps %s alive while enterprise authentication has no workspace window', async (platform) => {
+    vi.stubGlobal('process', { ...process, platform })
+    harness.app.isPackaged = false
+    vi.stubEnv('DSH_DESKTOP_ENTERPRISE_CONFIG', JSON.stringify({
+      appId: 'test.enterprise.desktop', productName: 'Enterprise test', origin: 'http://127.0.0.1:3090',
+    }))
+    const restoring = Promise.withResolvers<undefined>()
+    const restored = Promise.withResolvers<boolean>()
+    const { DesktopEnterpriseSession } = await import('../src/enterprise-session.ts')
+    vi.spyOn(DesktopEnterpriseSession.prototype, 'restore').mockImplementation(() => {
+      restoring.resolve(undefined)
+      return restored.promise
+    })
+    try {
+      await import('../src/main.ts')
+      await restoring.promise
+      expect(harness.app.emit('window-all-closed')).toBe(true)
+      expect(harness.app.quit).not.toHaveBeenCalled()
+    } finally {
+      restored.resolve(false)
+    }
+  })
+
   it.each([true, false])('selects the package manager before Host startup (packaged=%s)', async (packaged) => {
     harness.app.isPackaged = packaged
     await readyForUpdate()
@@ -477,6 +539,46 @@ describe('desktop main startup', () => {
         : 'test-pnpm',
       nodeBin: packaged ? join('desktop-test-resources', 'runtime', 'bin') : join('desktop-test-app', 'scripts', 'node-bin'),
     })
+  })
+
+  it('destroys the enterprise renderer before stopping its Host and waits for sign-out cleanup before restarting', async () => {
+    harness.app.isPackaged = false
+    vi.stubEnv('DSH_DESKTOP_ENTERPRISE_CONFIG', JSON.stringify({
+      appId: 'test.enterprise.desktop', productName: 'Enterprise test', origin: 'http://127.0.0.1:3090',
+    }))
+    const { DesktopEnterpriseSession } = await import('../src/enterprise-session.ts')
+    const profile = await import('../src/enterprise-profile.ts')
+    const { enterpriseSessionSchema } = await import('@deepseek-ai/dsh-enterprise/protocol')
+    const account = enterpriseSessionSchema.parse({
+      enterpriseId: 'company', userId: 'alice', name: 'Alice', email: 'alice@example.test', role: 'user',
+      expiresAt: '2099-01-01T00:00:00.000Z', provisioning: {
+        mode: 'basic', api: 'openai-completions', baseURL: 'https://provider.example.test/v1', apiKey: 'test-key',
+        models: [{ id: 'approved', name: 'Approved', contextWindow: 128000, maxTokens: 8192, input: ['text'] }],
+        defaultModel: 'approved',
+      },
+    })
+    vi.spyOn(DesktopEnterpriseSession.prototype, 'restore').mockResolvedValue(true)
+    vi.spyOn(DesktopEnterpriseSession.prototype, 'session', 'get').mockReturnValue(account)
+    vi.spyOn(DesktopEnterpriseSession.prototype, 'authorized', 'get').mockReturnValue(true)
+    vi.spyOn(DesktopEnterpriseSession.prototype, 'paths', 'get')
+      .mockReturnValue(profile.enterpriseAccountPaths(harness.app.getPath('userData'), account))
+    vi.spyOn(DesktopEnterpriseSession.prototype, 'prepareAndCommit').mockImplementation(prepare => prepare())
+    vi.spyOn(DesktopEnterpriseSession.prototype, 'startSynchronization').mockImplementation(() => {})
+    vi.spyOn(profile, 'prepareEnterpriseProfile').mockResolvedValue()
+    vi.spyOn(profile, 'writeEnterpriseCredentials').mockResolvedValue()
+    vi.spyOn(profile, 'resolveEnterpriseClientEntry').mockReturnValue('/test/enterprise-account/index.js')
+    const host = await readyForUpdate()
+    await Promise.resolve(invoke(DESKTOP_IPC.boot))
+    const window = harness.windows[0]!
+    const signingOut = invoke('dsh-enterprise:sign-out', 'app')
+    await host.stopping.promise
+    expect(window.isDestroyed()).toBe(true)
+    harness.app.emit('window-all-closed')
+    expect(harness.app.quit).not.toHaveBeenCalled()
+    expect(harness.app.relaunch).not.toHaveBeenCalled()
+    host.exited.resolve()
+    await signingOut
+    expect(harness.app.relaunch).toHaveBeenCalledOnce()
   })
 
   it('starts the Host with authentication popups disabled when local settings are invalid', async () => {

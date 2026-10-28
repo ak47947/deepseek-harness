@@ -1,12 +1,12 @@
 CLAUDE.local.md
 .env
-apps/desktop/.env.windows
-apps/desktop/.env.macos
+.env.*
+!*.example
 apps/desktop/*.p12
 node_modules/
 lib/
 *.tsbuildinfo
-pnpm-debug.log
+*.log
 .pnpm-store/
 .cache/
 examples/*/*.jsonl

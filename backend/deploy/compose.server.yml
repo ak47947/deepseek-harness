@@ -1,0 +1,19 @@
+# Optional public HTTPS entry point on the enterprise server.
+services:
+  edge:
+    image: caddy:2.10.2-alpine
+    environment:
+      DSH_ENTERPRISE_ORIGIN: ${DSH_ENTERPRISE_ORIGIN:?Configure the public HTTPS enterprise origin}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - enterprise-tls:/data
+      - enterprise-edge-config:/config
+    depends_on:
+      - backend
+    restart: unless-stopped
+volumes:
+  enterprise-tls:
+  enterprise-edge-config:

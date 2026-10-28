@@ -1,0 +1,36 @@
+services:
+  litellm-db:
+    image: postgres:17.6-bookworm
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_DB: litellm
+      POSTGRES_PASSWORD: ${LITELLM_POSTGRES_PASSWORD:?Configure LITELLM_POSTGRES_PASSWORD}
+    volumes: ["litellm-db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  litellm:
+    image: ghcr.io/berriai/litellm-database:v1.106.4
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      DATABASE_URL: postgresql://litellm:${LITELLM_POSTGRES_PASSWORD:?Configure LITELLM_POSTGRES_PASSWORD}@litellm-db:5432/litellm
+      LITELLM_MASTER_KEY: ${DSH_ENTERPRISE_LITELLM_KEY:?Configure DSH_ENTERPRISE_LITELLM_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?Configure LITELLM_SALT_KEY}
+      ENTERPRISE_PROVIDER_KEY: ${ENTERPRISE_PROVIDER_KEY:?Configure ENTERPRISE_PROVIDER_KEY}
+      LITELLM_TELEMETRY: "False"
+    volumes: ["./litellm.yml:/app/config.yaml:ro"]
+    depends_on:
+      litellm-db: { condition: service_healthy }
+    restart: unless-stopped
+  backend:
+    environment:
+      DSH_ENTERPRISE_MODE: managed
+      DSH_ENTERPRISE_LITELLM_URL: http://litellm:4000
+    depends_on:
+      postgres: { condition: service_healthy }
+      litellm: { condition: service_started }
+volumes:
+  litellm-db:

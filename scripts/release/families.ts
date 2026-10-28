@@ -350,6 +350,7 @@ class DshFamily extends ReleaseFamily {
   readonly patterns = [
     'packages/*/*/package.json',
     'apps/*/package.json',
+    'backend/package.json',
   ] as const
   readonly tagPrefix = 'dsh-v'
 

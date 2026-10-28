@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { globSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { load } from 'js-yaml'
 import { DESKTOP_HOST_RUNTIME_FILES, DESKTOP_PACKAGES_DIR } from '../src/core-package-set.ts'
 import {
   assertDesktopHostPackageFiles,
@@ -18,6 +20,26 @@ function packed(name: string, manifest: Record<string, unknown> = {}): PackedDes
 describe('desktop package-set selection', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
+  })
+
+  it('keeps the enterprise authentication server and its database out of the actual Desktop runtime closure', () => {
+    const repository = fileURLToPath(new URL('../../../', import.meta.url))
+    const workspace = load(readFileSync(join(repository, 'pnpm-workspace.yaml'), 'utf8')) as { packages: string[] }
+    const available = new Map<string, PackedDesktopPackage>()
+    for (const path of globSync(workspace.packages.map(pattern => `${pattern}/package.json`), { cwd: repository })) {
+      const manifest = JSON.parse(readFileSync(join(repository, path), 'utf8')) as Record<string, unknown>
+      if (typeof manifest.name !== 'string') throw new Error('Workspace package has no name')
+      available.set(manifest.name, packed(manifest.name, manifest))
+    }
+    expect(available.has('@deepseek-ai/dsh-enterprise')).toBe(true)
+    for (const platform of ['darwin', 'win32'] as const) {
+      const selected = selectDesktopPackageClosure(available, { platform, arch: 'x64' })
+      expect(selected.map(entry => entry.manifest.name)).not.toContain('@deepseek-ai/dsh-enterprise')
+      for (const entry of selected) {
+        expect(entry.manifest.dependencies ?? {}).not.toHaveProperty('better-auth')
+        expect(entry.manifest.dependencies ?? {}).not.toHaveProperty('pg')
+      }
+    }
   })
 
   it('does not select a packaging target when imported as a library', async () => {

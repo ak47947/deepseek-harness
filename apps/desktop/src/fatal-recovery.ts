@@ -9,7 +9,7 @@ interface RecoveryOperations {
   messages(): DesktopMessages
   show(options: MessageBoxOptions): Promise<MessageBoxReturnValue>
   stop(): Promise<void>
-  disablePlugins(): Promise<void>
+  disablePlugins?: (() => Promise<void>) | undefined
   exit(): void
   restart(): void
   /** Persist the complete diagnostic; resolves with the file path, or `undefined` when nothing was written. */
@@ -78,7 +78,7 @@ export class DesktopFatalRecovery {
         detail: addressInUse
           ? `${messages.startupAddressInUse}${reportLine(messages, reportPath)}`
           : dialogDetail(detail, messages, reportPath),
-        buttons: addressInUse
+        buttons: addressInUse || this.operations.disablePlugins === undefined
           ? [messages.exitApplication, messages.restartApplication]
           : [messages.exitApplication, messages.restartApplication, messages.disableThirdPartyPlugins],
         defaultId: 1,
@@ -92,7 +92,7 @@ export class DesktopFatalRecovery {
       }
       try {
         await this.operations.stop()
-        if (response === 2) await this.operations.disablePlugins()
+        if (response === 2 && this.operations.disablePlugins !== undefined) await this.operations.disablePlugins()
         this.operations.restart()
         return
       } catch (failure) {

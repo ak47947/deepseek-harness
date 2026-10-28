@@ -78,7 +78,8 @@ async function launchElectron(): Promise<void> {
   console.log(`desktop development: inspectors main=${String(mainPort)}, renderer=${String(rendererPort)}, host=${String(hostPort)}`)
   if (process.platform === 'darwin') {
     const executable = prepareDevelopmentApp({ electron, appRoot: APP_ROOT, directory: DEVELOPMENT_ROOT, home, userData,
-      mainPort, rendererPort, hostPort, openDevtools: environment.DSH_DESKTOP_OPEN_DEVTOOLS! })
+      mainPort, rendererPort, hostPort, openDevtools: environment.DSH_DESKTOP_OPEN_DEVTOOLS!,
+      primaryRuntime: environment.DSH_DESKTOP_PRIMARY_RUNTIME_DIR!, enterpriseConfig: environment.DSH_DESKTOP_ENTERPRISE_CONFIG })
     await run(executable, [], APP_ROOT, environment)
     return
   }

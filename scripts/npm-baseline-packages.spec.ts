@@ -22,6 +22,7 @@ describe('npm baseline package discovery', () => {
   it('discovers ordinary package roots and unlisted experimental packages', () => {
     const expected = [
       'apps/cli/package.json',
+      'backend/package.json',
       'packages/core/session/package.json',
       'packages/experimental/agent-team/package.json',
       'packages/experimental/new-prototype/package.json',

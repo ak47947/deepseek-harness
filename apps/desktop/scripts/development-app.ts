@@ -15,6 +15,9 @@ export interface DevelopmentAppOptions {
   readonly rendererPort: number
   readonly hostPort: number
   readonly openDevtools: string
+  readonly primaryRuntime: string
+  /** Public enterprise connection settings; absent for the official application. */
+  readonly enterpriseConfig: string | undefined
 }
 
 function quote(value: string): string { return `'${value.replaceAll("'", "'\\''")}'` }
@@ -65,6 +68,8 @@ export function developmentLauncher(options: DevelopmentAppOptions, bundle: stri
     DSH_DESKTOP_DEV_APP: '1',
     DSH_DESKTOP_HOST_INSPECT_PORT: String(options.hostPort),
     DSH_DESKTOP_OPEN_DEVTOOLS: options.openDevtools,
+    DSH_DESKTOP_PRIMARY_RUNTIME_DIR: options.primaryRuntime,
+    ...(options.enterpriseConfig === undefined ? {} : { DSH_DESKTOP_ENTERPRISE_CONFIG: options.enterpriseConfig }),
     ELECTRON_ENABLE_LOGGING: '1',
   }
   const args = [

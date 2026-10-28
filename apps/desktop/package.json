@@ -84,6 +84,11 @@
     "@deepseek-ai/dsh-client-shortcuts": "workspace:*",
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "@deepseek-ai/dsh-client-product-analytics": "workspace:*",
-    "@deepseek-ai/dsh-util-file-drag": "workspace:*"
+    "@deepseek-ai/dsh-util-file-drag": "workspace:*",
+    "@deepseek-ai/dsh-enterprise": "workspace:*",
+    "@deepseek-ai/cordis-plugin-include": "workspace:~",
+    "zod": "^4.4.3",
+    "@deepseek-ai/dsh-client-ui-settings-enterprise-account": "workspace:*",
+    "@deepseek-ai/dsh-credentials-local": "workspace:*"
   }
 }

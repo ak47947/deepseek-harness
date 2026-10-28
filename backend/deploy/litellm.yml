@@ -1,0 +1,14 @@
+model_list:
+  - model_name: enterprise-approved
+    litellm_params:
+      model: openai/REPLACE_WITH_APPROVED_PROVIDER_MODEL
+      api_base: https://REPLACE_WITH_APPROVED_PROVIDER/v1
+      api_key: os.environ/ENTERPRISE_PROVIDER_KEY
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+litellm_settings:
+  telemetry: false
+  success_callback: []
+  set_verbose: false
+  turn_off_message_logging: true

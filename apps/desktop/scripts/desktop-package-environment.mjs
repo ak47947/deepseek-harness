@@ -13,6 +13,7 @@ import { resolveMacOSPackageSettings } from './macos-package-settings.mjs'
 import { resolveWindowsSignatureCacheDirectory } from './windows-signature-cache-directory.mjs'
 import { resolveWindowsPackageSettings } from './windows-package-settings.mjs'
 import { resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { resolveEnterprisePackageEnvironment } from './enterprise-package-environment.mjs'
 
 const APP_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const SHARED_SETTING = /^(?:DSH_DESKTOP_(?:APP_ID|AUTO_UPDATE_ENV|NPM_REGISTRY|MANDATORY_UPDATE_(?:CONFIG|(?:TEST|PROD)_ORIGIN))|DOWNLOAD_TEST_RELEASE_ID|DOWNLOAD_(?:TEST|PROD)_(?:ORIGIN|COS_BUCKET|COS_SECRET_ID|COS_SECRET_KEY))$/u
@@ -47,6 +48,13 @@ export function localMacOSPackageEnvironment(environment = process.env) {
  * @returns {NodeJS.ProcessEnv} Isolated environment with file-owned release settings.
  */
 export function loadDesktopPackageEnvironment(platform, environment = process.env, appRoot = APP_ROOT, options = {}) {
+  if (environment.DSH_ENTERPRISE_PACKAGING_ENV !== undefined) {
+    const path = environment.DSH_ENTERPRISE_PACKAGING_ENV
+    if (!isAbsolute(path)) throw new Error('enterprise package: DSH_ENTERPRISE_PACKAGING_ENV must be absolute')
+    const settings = readSettings(path, name => SHARED_SETTING.test(name) || WINDOWS_SETTING.test(name) || MACOS_SETTING.test(name) || /^DSH_DESKTOP_(?:UPDATE_CHANNEL|ENTERPRISE_(?:CONFIG|UPDATE_URL|POLICY_ORIGIN|ICON))$/u.test(name))
+    if (settings.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined) throw new Error('enterprise package: the selected release file must configure DSH_DESKTOP_ENTERPRISE_CONFIG')
+    return { ...Object.fromEntries(Object.entries(environment).filter(([name]) => !AMBIENT_RELEASE_SETTING.test(name))), ...settings }
+  }
   const compression = environment.PACKAGE_WINDOWS_COMPRESSION_LEVEL
   if (compression !== undefined && compression !== '') {
     if (platform !== 'win32' || !['3', '7'].includes(compression)) {
@@ -153,14 +161,15 @@ function requireReadableFile(environment, name) {
  * @returns {void}
  */
 export function validateDesktopPackageEnvironment(environment, target, options = {}) {
+  const enterprise = resolveEnterprisePackageEnvironment({ ...environment, DSH_DESKTOP_UNSIGNED: options.unsigned ? '1' : '0' }, target.platform, target.arch)
   resolveDesktopTargetBuildPaths(environment, target.platform, target.arch)
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
-  if (target.platform !== 'darwin' || !options.unsigned) resolveDesktopPolicyEnvironment(environment)
+  if (enterprise === undefined && (target.platform !== 'darwin' || !options.unsigned)) resolveDesktopPolicyEnvironment(environment)
   if (target.platform === 'darwin') resolveMacOSPackageSettings(environment)
   else resolveWindowsPackageSettings(environment)
   if (options.unsigned) return
-  if (!options.prepareOnly) resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
+  if (!options.prepareOnly && enterprise === undefined) resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
   if (target.platform === 'win32') {
     if (!options.prepareOnly) createWindowsTokenSigner({
       certificateFile: environment.DSH_DESKTOP_WINDOWS_CER_FILE,

@@ -72,6 +72,23 @@ describe('Project Reference compiler faces', () => {
     ])
   })
 
+  it('checks compiler faces in the top-level backend workspace', () => {
+    const root = workspaceFixture({
+      host: ['./backend/tsconfig.client.json'],
+      client: ['./backend/tsconfig.client.json'],
+    })
+    const backend = join(root, 'backend')
+    mkdirSync(backend)
+    writeJson(join(backend, 'package.json'), { name: '@deepseek-ai/dsh-enterprise' })
+    writeJson(join(backend, 'tsconfig.json'), { files: [] })
+    writeJson(join(backend, 'tsconfig.host.json'), {})
+    writeJson(join(backend, 'tsconfig.client.json'), {})
+
+    expect(collectProjectReferenceFaceViolations(root)).toEqual([
+      'tsconfig.host.json: Project Reference "./backend/tsconfig.client.json" enters split project backend from a Host config; reference "backend/tsconfig.host.json" instead',
+    ])
+  })
+
   it('uses the referencing project face throughout the reachable graph', () => {
     const root = workspaceFixture({
       host: ['./packages/core/host-consumer'],

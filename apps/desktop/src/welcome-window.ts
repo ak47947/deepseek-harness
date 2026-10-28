@@ -13,7 +13,9 @@ import { WELCOME_IPC, type WelcomeOperations } from './welcome-api.ts'
  * @param locale - shell-owned localized copy.
  * @returns sandboxed window options with a locale-only preload.
  */
-export function welcomeWindowOptions(platform: NodeJS.Platform, locale: DesktopLocale): BrowserWindowConstructorOptions {
+export function welcomeWindowOptions(platform: NodeJS.Platform, locale: DesktopLocale): BrowserWindowConstructorOptions & {
+  webPreferences: Electron.WebPreferences & { additionalArguments: string[] }
+} {
   return {
     width: 600,
     height: 700,
@@ -58,6 +60,7 @@ let disposeActiveHandlers: (() => void) | undefined
  */
 export async function openWelcomeWindow(locale: DesktopLocale, operations: WelcomeOperations): Promise<BrowserWindow> {
   const options = welcomeWindowOptions(process.platform, locale)
+  if (operations.enterprise === true) options.webPreferences.additionalArguments.push('--dsh-welcome-enterprise')
   const window = new BrowserWindow(options)
   disposeActiveHandlers?.()
   let active = true

@@ -205,6 +205,20 @@ function rootTypeRemoval(path: string, entry: string): string {
 }
 
 describe('package dependency scope', () => {
+  it('discovers the backend workspace without treating nested packages as workspaces', () => {
+    const { packages } = workspaceFixture({
+      'package.json': { name: '@deepseek-ai/dsh-root' },
+      'backend/package.json': { name: '@deepseek-ai/dsh-enterprise' },
+      'backend/nested/package.json': { name: '@fixture/nested' },
+    })
+    expect(packages.map(pkg => pkg.manifestPath)).toEqual(['backend/package.json'])
+  })
+
+  it('rejects a backend workspace without a package name', () => {
+    expect(() => workspaceFixture({ 'package.json': {}, 'backend/package.json': {} }))
+      .toThrow('backend/package.json: missing package name')
+  })
+
   it('keeps the measured Host relay roster explicit', () => {
     expect(PACKAGE_DEPENDENCY_POLICY.clientFaceExclude).toEqual([
       '@deepseek-ai/dsh-api-session-controller',

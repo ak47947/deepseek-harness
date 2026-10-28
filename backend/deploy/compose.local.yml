@@ -1,0 +1,12 @@
+# Local development: independent containers, loopback access, and an explicitly selected private environment file.
+services:
+  backend:
+    image: dsh-enterprise:local
+    pull_policy: never
+    env_file: !override
+      - ${DSH_ENTERPRISE_ENV_FILE:?Configure the absolute path to the private local environment file}
+    environment:
+      DSH_ENTERPRISE_ORIGIN: http://127.0.0.1:${DSH_ENTERPRISE_LOCAL_PORT:-3092}
+      DSH_HOME: /data/harness
+    ports: !override
+      - "127.0.0.1:${DSH_ENTERPRISE_LOCAL_PORT:-3092}:3090"

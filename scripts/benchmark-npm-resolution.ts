@@ -14,6 +14,7 @@ const TERMINATION_GRACE_MS = 1_000
 const FORCED_EXIT_TIMEOUT_MS = 5_000
 const WORKSPACE_MANIFEST_GLOBS = [
   'apps/*/package.json',
+  'backend/package.json',
   'packages/*/*/package.json',
   'vendor/*/package.json',
   'native/system/package.json',

@@ -1,0 +1,21 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.name {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.loading {
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+}

@@ -11,10 +11,11 @@ import type { WelcomeSaveResult, WelcomeNotice } from '../src/welcome-api.ts'
 const html = readFileSync(join(import.meta.dirname, '../renderer/welcome.html'), 'utf8')
 afterEach(cleanup)
 
-function mount(language = 'zh-CN', takeNotice = vi.fn<() => Promise<WelcomeNotice | undefined>>().mockResolvedValue(undefined)) {
+function mount(language = 'zh-CN', takeNotice = vi.fn<() => Promise<WelcomeNotice | undefined>>().mockResolvedValue(undefined), enterprise = false) {
   cleanup()
   const stopAccount = vi.fn()
   const api = {
+    enterprise,
     takeNotice,
     analytics: vi.fn(async (_event: string, _attributes: object) => {}),
     analyticsEnabled: async () => true,
@@ -48,6 +49,18 @@ function mount(language = 'zh-CN', takeNotice = vi.fn<() => Promise<WelcomeNotic
 }
 
 describe('desktop welcome presentation', () => {
+  it.each(['zh-CN', 'en'])('requires enterprise sign-in without API-key or skip actions in %s', async (language) => {
+    const view = mount(language, undefined, true)
+    expect(view.button('#api-key').hidden).toBe(true)
+    await expect(view.copy()).toMatchFileSnapshot(`./expected/welcome/${language}-enterprise.expected.txt`)
+    fireEvent.click(view.button('#skip-key'))
+    expect(view.api.skip).not.toHaveBeenCalled()
+    fireEvent.click(view.button('#sign-in'))
+    expect(view.api.startSignIn).toHaveBeenCalledOnce()
+    await act(async () => {})
+    expect(view.api.saveApiKey).not.toHaveBeenCalled()
+  })
+
   it.each(['zh-CN', 'en'])('renders the %s entry and API-key step', async (language) => {
     const view = mount(language)
     expect(view.document.documentElement.lang).toBe(language)

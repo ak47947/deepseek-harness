@@ -1,0 +1,67 @@
+# Bilingual-pair consistency record for enterprise_agent_harness_proposal.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/ent-agent/enterprise_agent_harness_proposal.md
+/:
+  en: 51c468cc7d0bd188
+  zh: 89a7fa1df6d95181
+/enterprise-agent-desktop-architecture-and-delivery-plan:
+  en: b47889cb8ee9e46d
+  zh: 9e0cca093a317179
+/enterprise-agent-desktop-architecture-and-delivery-plan/summary:
+  en: fabe284c6035e6a9
+  zh: df372766125a6b32
+/enterprise-agent-desktop-architecture-and-delivery-plan/table-of-contents:
+  en: 31b091f6e3e95d8a
+  zh: c9bb6288340809de
+/enterprise-agent-desktop-architecture-and-delivery-plan/1-initial-scope:
+  en: 6471f78fe0f7e0d1
+  zh: a544cea168f67449
+/enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities:
+  en: 3d70f90802d79867
+  zh: c7aca25b0e255f07
+/enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities/better-auth-and-the-administration-ui:
+  en: f4f5f055eccec3b8
+  zh: e5d94f94f2150a7e
+/enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities/release-and-gateway-versions:
+  en: e78b4d8a6a6f4583
+  zh: e1f93cf2dbb80552
+/enterprise-agent-desktop-architecture-and-delivery-plan/3-deployment-architecture:
+  en: 9aec0b4ad6f448ea
+  zh: 7138a89945ff3cc3
+/enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration:
+  en: 2c2040a0c7d2d6ee
+  zh: 58c9d7baa6812e7f
+/enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/sign-in-and-configuration-synchronization:
+  en: 291cada15ec0b0f4
+  zh: 574a013ece76147e
+/enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/accounts-and-local-data-isolation:
+  en: c47c7592ed63ad05
+  zh: 3ce9a6a6c20bd183
+/enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/sign-out-and-deactivation:
+  en: 05567dfe61043ffb
+  zh: 6094cb45e123a425
+/enterprise-agent-desktop-architecture-and-delivery-plan/5-model-provisioning-and-cost-management:
+  en: 002118aa90fb323d
+  zh: b5d36d06dc6e57fd
+/enterprise-agent-desktop-architecture-and-delivery-plan/6-local-execution-and-data-handling:
+  en: 21b62082a2e8d37c
+  zh: 83810e94795f8b92
+/enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance:
+  en: 638fd170d8eeea3a
+  zh: fe8045e1df29b236
+/enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/delivery-sequence:
+  en: 675e4a223a157288
+  zh: 1d8164587f4f4d4a
+/enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/deployment-and-resources:
+  en: f3d130727d4955da
+  zh: 0408215c45e25d09
+/enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/required-acceptance-results:
+  en: 81e45712b41d7232
+  zh: 8ffc435e3f92fc1c
+/enterprise-agent-desktop-architecture-and-delivery-plan/8-future-extensions:
+  en: 532f177cc2ef05b8
+  zh: 039ca72e5656e1fe
+/enterprise-agent-desktop-architecture-and-delivery-plan/dev-note:
+  en: aca0e00ec032087b
+  zh: 3739a023f189e9ff

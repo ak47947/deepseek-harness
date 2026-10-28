@@ -29,12 +29,12 @@ describe('application entrypoints', () => {
     expect(applicationEntrypointViolations(resolve(import.meta.dirname, '..'))).toEqual([])
   })
 
-  it('rejects a package-level application bin', () => {
+  it.each(['packages/example/app', 'backend'])('rejects an application bin in %s', (directory) => {
     const root = fixture()
-    write(root, 'packages/example/app/package.json', JSON.stringify({ bin: { app: 'lib/bin.js' } }))
+    write(root, `${directory}/package.json`, JSON.stringify({ bin: { app: 'lib/bin.js' } }))
 
     expect(applicationEntrypointViolations(root)).toEqual([
-      'packages/example/app/package.json: package bin bypasses the dsh launcher; applications use apps/cli profiles',
+      `${directory}/package.json: package bin bypasses the dsh launcher; applications use apps/cli profiles`,
     ])
   })
 
@@ -47,12 +47,12 @@ describe('application entrypoints', () => {
     ])
   })
 
-  it('rejects an executable at an application package root', () => {
+  it.each(['apps/example', 'backend'])('rejects an executable at the %s package root', (directory) => {
     const root = fixture()
-    write(root, 'apps/example/rogue.mjs', '#!/usr/bin/env node\n')
+    write(root, `${directory}/rogue.mjs`, '#!/usr/bin/env node\n')
 
     expect(applicationEntrypointViolations(root)).toEqual([
-      'apps/example/rogue.mjs: executable source has no application/build/test classification',
+      `${directory}/rogue.mjs: executable source has no application/build/test classification`,
     ])
   })
 
