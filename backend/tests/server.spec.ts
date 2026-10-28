@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { EnterpriseServer } from '../src/server.ts'
 import { resolveEnterpriseConfig } from '../src/config.ts'
 import { enterpriseSessionSchema } from '../src/protocol.ts'
+import { EnterpriseDepartments } from '../src/departments.ts'
 
 const cleanup: Array<() => Promise<void>> = []
 afterEach(async () => {
@@ -70,6 +71,62 @@ const provisioning = {
 }
 
 describe('enterprise service', () => {
+  it('persists departments and membership, rejects invalid references, and protects populated departments', async () => {
+    const { request, login, pool } = await fixture()
+    const admin = await login('admin@example.test', 'test-admin-password')
+    const created = await request('/v1/admin/employees', admin, {
+      name: 'Alice', email: 'alice@example.test', password: 'test-alice-password', role: 'user',
+    })
+    const { user } = z.object({ user: z.object({ id: z.string() }) }).parse(await created.json())
+    const employee = await login('alice@example.test', 'test-alice-password')
+    expect((await request('/v1/admin/departments')).status).toBe(401)
+    for (const payload of [undefined, { name: 'Forbidden', description: '' }]) {
+      expect((await request('/v1/admin/departments', employee, payload)).status).toBe(403)
+    }
+    for (const input of [{ name: ' ', description: '' }, { name: 'x'.repeat(101), description: '' }, { name: 'Invalid', description: 'x'.repeat(501) }, { name: 'Invalid', description: '', role: 'admin' }]) {
+      expect((await request('/v1/admin/departments', admin, input)).status).toBe(400)
+    }
+    const departmentSchema = z.object({ id: z.uuid(), name: z.string(), description: z.string(), memberCount: z.number() })
+    const addDepartment = async (name: string) => {
+      const response = await request('/v1/admin/departments', admin, { name, description: 'Team description' })
+      expect(response.status).toBe(201)
+      return z.object({ department: departmentSchema }).parse(await response.json()).department
+    }
+    const engineering = await addDepartment(' Engineering ')
+    const operations = await addDepartment('Operations')
+    expect(engineering).toMatchObject({ name: 'Engineering', memberCount: 0 })
+    const duplicate = await request('/v1/admin/departments', admin, { name: 'Engineering', description: '' })
+    expect(duplicate.status).toBe(409)
+    expect(await duplicate.json()).toEqual({ error: { code: 'department_name_exists' } })
+    const membershipPath = `/v1/admin/employees/${user.id}/department`
+    expect((await request(membershipPath, employee, { departmentId: engineering.id })).status).toBe(403)
+    expect((await request(membershipPath, admin, { departmentId: 'not-an-id' })).status).toBe(400)
+    expect((await request('/v1/admin/employees/missing/department', admin, { departmentId: engineering.id })).status).toBe(404)
+    expect((await request(membershipPath, admin, { departmentId: '00000000-0000-4000-8000-000000000000' })).status).toBe(404)
+    expect((await request(membershipPath, admin, { departmentId: engineering.id })).status).toBe(200)
+    expect((await request(membershipPath, admin, { departmentId: engineering.id })).status).toBe(200)
+    const departmentList = async () => z.object({ departments: z.array(departmentSchema) }).parse(await (await request('/v1/admin/departments', admin)).json()).departments
+    expect(await departmentList()).toEqual([{ ...engineering, memberCount: 1 }, operations])
+    const blocked = await request(`/v1/admin/departments/${engineering.id}/delete`, admin, {})
+    expect(blocked.status).toBe(409)
+    expect(await blocked.json()).toEqual({ error: { code: 'department_not_empty' } })
+    const conflictingRename = await request(`/v1/admin/departments/${engineering.id}`, admin, { name: 'Operations', description: '' })
+    expect(conflictingRename.status).toBe(409)
+    expect((await request(`/v1/admin/departments/${engineering.id}`, admin, { name: 'Research', description: 'Updated' })).status).toBe(200)
+    // A new database owner reruns the additive migration without replacing durable membership.
+    const reopened = new EnterpriseDepartments(pool)
+    await reopened.migrate()
+    expect(await reopened.list()).toContainEqual({ ...engineering, name: 'Research', description: 'Updated', memberCount: 1 })
+    const directory = await (await request('/v1/admin/employees', admin)).json() as { employees: Array<{ id: string; departmentId: string | null }> }
+    expect(directory.employees.find(row => row.id === user.id)?.departmentId).toBe(engineering.id)
+    expect((await request(membershipPath, admin, { departmentId: operations.id })).status).toBe(200)
+    expect((await request(`/v1/admin/departments/${engineering.id}/delete`, admin, {})).status).toBe(200)
+    expect((await request(`/v1/admin/departments/${engineering.id}/delete`, admin, {})).status).toBe(404)
+    expect((await request(membershipPath, admin, { departmentId: null })).status).toBe(200)
+    expect((await request(`/v1/admin/departments/${operations.id}/delete`, admin, {})).status).toBe(200)
+    expect(await departmentList()).toEqual([])
+  })
+
   it('serves the standalone administration page while protecting account data before login', async () => {
     const { request } = await fixture()
     for (const path of ['/admin', '/admin/', '/']) {

@@ -14,6 +14,8 @@ import { EnterpriseStore } from './store.ts'
 import { LiteLlmGateway } from './litellm.ts'
 import { enterpriseSessionSchema, provisioningSchema, EnterpriseRequestError } from './protocol.ts'
 import { adminDocument, adminScript, adminStyles } from './web.ts'
+import { EnterpriseDepartments, DepartmentRequestError, departmentIdSchema, departmentInputSchema } from './departments.ts'
+import type { EnterpriseUserId } from './protocol.ts'
 import {
   authorizationBrandSvg,
   authorizationDocument,
@@ -116,6 +118,7 @@ async function body(request: IncomingMessage, limit = 1024 * 1024): Promise<unkn
 export class EnterpriseServer {
   private readonly auth: EnterpriseAuth
   readonly store: EnterpriseStore
+  private readonly departments: EnterpriseDepartments
   private readonly gateway: LiteLlmGateway | undefined
   private readonly server: Server
   private readonly requests = new Set<Promise<void>>()
@@ -134,6 +137,7 @@ export class EnterpriseServer {
   ) {
     this.auth = createEnterpriseAuth(database, config)
     this.store = new EnterpriseStore(database, new EnterpriseSecrets(config.BETTER_AUTH_SECRET))
+    this.departments = new EnterpriseDepartments(database)
     this.gateway = config.DSH_ENTERPRISE_MODE === 'managed' ? new LiteLlmGateway(config, send) : undefined
     this.server = createServer((request, response) => {
       const pending = this.handle(request, response)
@@ -144,7 +148,7 @@ export class EnterpriseServer {
           }
           const status =
             error instanceof EnterpriseRequestError ? error.status : error instanceof z.ZodError ? 400 : 503
-          json(response, status, { error: { code: status === 503 ? 'service_unavailable' : 'request_rejected' } })
+          json(response, status, { error: { code: error instanceof DepartmentRequestError ? error.code : status === 503 ? 'service_unavailable' : 'request_rejected' } })
         })
         .finally(() => {
           this.requests.delete(pending)
@@ -163,6 +167,7 @@ export class EnterpriseServer {
     const migrations = await getMigrations(this.auth.options)
     await migrations.runMigrations()
     await this.store.migrate()
+    await this.departments.migrate()
     if (
       this.gateway !== undefined &&
       (await this.store.hasBasicAssignments()) &&
@@ -285,6 +290,23 @@ export class EnterpriseServer {
       if (request.headers['sec-fetch-site'] === 'cross-site') throw new EnterpriseRequestError(403)
     }
     const employee = await this.employee(request, url.pathname.startsWith('/v1/admin/'))
+    if (url.pathname === '/v1/admin/departments') {
+      if (request.method === 'GET') json(response, 200, { departments: await this.departments.list() })
+      else if (request.method === 'POST') json(response, 201, { department: await this.departments.create(departmentInputSchema.parse(await body(request))) })
+      else throw new EnterpriseRequestError(405)
+      return
+    }
+    const departmentMatch = /^\/v1\/admin\/departments\/([^/]+)(\/delete)?$/u.exec(url.pathname)
+    if (departmentMatch !== null) {
+      if (request.method !== 'POST') throw new EnterpriseRequestError(405)
+      const id = departmentIdSchema.parse(decodeURIComponent(departmentMatch[1] ?? ''))
+      if (departmentMatch[2] === '/delete') {
+        z.object({}).strict().parse(await body(request))
+        await this.departments.remove(id)
+      } else await this.departments.update(id, departmentInputSchema.parse(await body(request)))
+      json(response, 200, { ok: true })
+      return
+    }
     if (url.pathname === '/v1/admin/models' && request.method === 'GET') {
       if (this.gateway === undefined) throw new EnterpriseRequestError(404)
       json(response, 200, { models: await this.gateway.models() })
@@ -321,7 +343,7 @@ export class EnterpriseServer {
     }
     if (url.pathname === '/v1/admin/employees' && request.method === 'GET') {
       const users = await this.database.query(
-        'SELECT id, name, email, role, banned FROM "user" ORDER BY "createdAt" DESC LIMIT 1000',
+        'SELECT u.id, u.name, u.email, u.role, u.banned, m.department_id AS "departmentId" FROM "user" u LEFT JOIN enterprise_department_member m ON m.user_id = u.id ORDER BY u."createdAt" DESC LIMIT 1000',
       )
       const rows = await Promise.all(
         users.rows.map(async (user: { id: string }) => {
@@ -334,7 +356,7 @@ export class EnterpriseServer {
           }
         }),
       )
-      json(response, 200, { mode: this.config.DSH_ENTERPRISE_MODE, employees: rows })
+      json(response, 200, { mode: this.config.DSH_ENTERPRISE_MODE, employees: rows, viewerId: employee.user.id })
       return
     }
     if (url.pathname === '/v1/admin/employees' && request.method === 'POST') {
@@ -344,7 +366,7 @@ export class EnterpriseServer {
       return
     }
     const match =
-      /^\/v1\/admin\/employees\/([^/]+)\/(assignment|password|disable|retry-cleanup|role|budget|usage)$/u.exec(
+      /^\/v1\/admin\/employees\/([^/]+)\/(assignment|password|disable|retry-cleanup|role|budget|usage|department)$/u.exec(
         url.pathname,
       )
     if (match === null) throw new EnterpriseRequestError(404)
@@ -362,7 +384,10 @@ export class EnterpriseServer {
       return
     }
     if (request.method !== 'POST') throw new EnterpriseRequestError(405)
-    if (action === 'assignment') {
+    if (action === 'department') {
+      const input = z.object({ departmentId: departmentIdSchema.nullable() }).strict().parse(await body(request))
+      await this.departments.assign(userId as EnterpriseUserId, input.departmentId)
+    } else if (action === 'assignment') {
       const configuration = provisioningSchema.parse(await body(request))
       if (configuration.mode !== this.config.DSH_ENTERPRISE_MODE) throw new EnterpriseRequestError(409)
       const previous = await this.store.assignment(userId)

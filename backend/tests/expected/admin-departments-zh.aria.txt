@@ -1,0 +1,24 @@
+- text: 部门总数 1
+- paragraph: 企业已创建的组织部门
+- text: 已分配成员 1
+- paragraph: 已设置所属部门的账号
+- text: 未分配成员 10
+- paragraph: 尚未设置所属部门的账号
+- searchbox "搜索部门…"
+- table:
+  - rowgroup:
+    - row "部门名称 部门说明 成员数 操作":
+      - columnheader "部门名称"
+      - columnheader "部门说明"
+      - columnheader "成员数"
+      - columnheader "操作"
+  - rowgroup:
+    - 'row "Engineering Product and platform engineering Engineering · 成员数: 1 编辑部门 删除部门"':
+      - cell "Engineering":
+        - strong: Engineering
+      - cell "Product and platform engineering"
+      - 'cell "Engineering · 成员数: 1"':
+        - 'button "Engineering · 成员数: 1"': "1"
+      - cell "编辑部门 删除部门":
+        - button "编辑部门"
+        - button "删除部门"

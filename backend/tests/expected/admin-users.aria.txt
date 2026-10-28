@@ -1,0 +1,47 @@
+- searchbox "Search name or email…"
+- combobox "Filter by department":
+  - option "All departments" [selected]
+  - option "Unassigned"
+  - option "Engineering"
+- combobox "Filter by role":
+  - option "All roles" [selected]
+  - option "Administrator"
+  - option "Employee"
+- combobox "Filter by status":
+  - option "All statuses" [selected]
+  - option "Active"
+  - option "Disabled"
+- table:
+  - rowgroup:
+    - row "Name Department Role Status Actions":
+      - columnheader "Name"
+      - columnheader "Department"
+      - columnheader "Role"
+      - columnheader "Status"
+      - columnheader "Actions"
+  - rowgroup:
+    - row "Alice alice@example.test Engineering Employee Active Models":
+      - cell "Alice alice@example.test":
+        - strong: Alice
+        - text: alice@example.test
+      - cell "Engineering"
+      - cell "Employee"
+      - cell "Active"
+      - cell "Models":
+        - button "Models"
+        - group
+    - row "Administrator admin@example.test Unassigned Administrator Models not assigned Models":
+      - cell "Administrator admin@example.test":
+        - strong: Administrator
+        - text: admin@example.test
+      - cell "Unassigned"
+      - cell "Administrator"
+      - cell "Models not assigned"
+      - cell "Models":
+        - button "Models"
+        - group
+- text: 1–2 of 2 users
+- button "Previous" [disabled]
+- text: Page 1 of 1
+- button "Next" [disabled]
+- paragraph: The directory displays up to the 1,000 most recently created accounts.
