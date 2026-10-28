@@ -80,7 +80,7 @@ export const enterpriseSessionSchema = z
   })
   .strict()
 
-/** Model configuration stored for a single employee. */
+/** Model route stored as a platform default or an employee assignment. */
 export type Provisioning = z.infer<typeof provisioningSchema>
 /** Server-authenticated account and its complete model configuration. */
 export type EnterpriseSession = z.infer<typeof enterpriseSessionSchema>

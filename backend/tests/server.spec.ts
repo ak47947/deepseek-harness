@@ -71,6 +71,107 @@ const provisioning = {
 }
 
 describe('enterprise service', () => {
+  it('maintains department hierarchy, rejects cycles, and preserves child links after migration', async () => {
+    const { request, login, pool } = await fixture()
+    const admin = await login('admin@example.test', 'test-admin-password')
+    const add = async (name: string, parentId: string | null = null) => {
+      const result = await request('/v1/admin/departments', admin, { name, description: '', parentId })
+      expect(result.status).toBe(201)
+      return z.object({ department: z.object({ id: z.uuid(), parentId: z.uuid().nullable() }) }).parse(await result.json()).department
+    }
+    const root = await add('Engineering')
+    const child = await add('Platform', root.id)
+    const leaf = await add('Infrastructure', child.id)
+    expect(child.parentId).toBe(root.id)
+    const move = (id: string, parentId: string | null) => request(`/v1/admin/departments/${id}`, admin, { name: 'Engineering', description: '', parentId })
+    for (const parent of [root.id, child.id, leaf.id]) {
+      const result = await move(root.id, parent)
+      expect(result.status).toBe(409)
+      expect(await result.json()).toEqual({ error: { code: 'department_cycle' } })
+    }
+    expect((await request(`/v1/admin/departments/${root.id}/delete`, admin, {})).status).toBe(409)
+    expect((await move(root.id, '00000000-0000-4000-8000-000000000000')).status).toBe(404)
+    expect((await request('/v1/admin/departments', admin, { name: 'Invalid', description: '', parentId: '00000000-0000-4000-8000-000000000000' })).status).toBe(404)
+    const reopened = new EnterpriseDepartments(pool)
+    await reopened.migrate()
+    expect(await reopened.list()).toContainEqual(expect.objectContaining({ id: child.id, parentId: root.id }))
+    expect((await request(`/v1/admin/departments/${child.id}`, admin, { name: 'Platform', description: '', parentId: null })).status).toBe(200)
+    expect((await request(`/v1/admin/departments/${root.id}/delete`, admin, {})).status).toBe(200)
+  })
+
+  it('inherits encrypted platform defaults, keeps overrides, and restores inheritance when cleared', async () => {
+    const { request, login, pool } = await fixture()
+    const admin = await login('admin@example.test', 'test-admin-password')
+    const created = await request('/v1/admin/employees', admin, { name: 'Alice', email: 'alice@example.test', password: 'test-alice-password', role: 'user' })
+    const { user } = z.object({ user: z.object({ id: z.string() }) }).parse(await created.json())
+    const employee = await login('alice@example.test', 'test-alice-password')
+    expect((await request('/v1/session', employee)).status).toBe(409)
+    expect((await request('/v1/admin/platform-default', employee, provisioning)).status).toBe(403)
+    expect((await request('/v1/admin/platform-default', admin, { ...provisioning, defaultModel: 'missing' })).status).toBe(400)
+    expect((await request('/v1/admin/platform-default', admin, provisioning)).status).toBe(200)
+    const session = async () => enterpriseSessionSchema.parse(await (await request('/v1/session', employee)).json())
+    expect((await session()).provisioning).toEqual(provisioning)
+    const defaultText = await (await request('/v1/admin/platform-default', admin)).text()
+    expect(defaultText).not.toContain(provisioning.apiKey)
+    expect((await pool.query('SELECT configuration FROM enterprise_platform_default')).rows[0].configuration).not.toContain(provisioning.apiKey)
+    const assignment = `/v1/admin/employees/${user.id}/assignment`
+    const override = { ...provisioning, baseURL: 'https://personal.example.test/v1' }
+    expect((await request(assignment, admin, override)).status).toBe(200)
+    const next = { ...provisioning, apiKey: 'updated-platform-key', baseURL: 'https://new.example.test/v1' }
+    expect((await request('/v1/admin/platform-default', admin, next)).status).toBe(200)
+    expect((await session()).provisioning).toEqual(override)
+    expect((await request(assignment, admin, { usePlatformDefault: true })).status).toBe(200)
+    expect((await session()).provisioning).toEqual(next)
+    const changed = { ...next, defaultModel: 'next-model', models: [{ ...provisioning.models[0], id: 'next-model', name: 'Next model' }] }
+    expect((await request('/v1/admin/platform-default', admin, changed)).status).toBe(200)
+    const listing = await (await request('/v1/admin/employees', admin)).text()
+    expect(listing).toContain('"assignmentSource":"platform"')
+    expect(listing).not.toContain('updated-platform-key')
+    expect((await session()).provisioning).toEqual(changed)
+    expect((await request('/v1/admin/employees', admin, { name: 'Bob', email: 'bob@example.test', password: 'test-bob-password', role: 'user' })).status).toBe(201)
+    const bob = await login('bob@example.test', 'test-bob-password')
+    expect(enterpriseSessionSchema.parse(await (await request('/v1/session', bob)).json()).provisioning).toEqual(changed)
+  })
+
+  it('refreshes inherited managed access with a private employee key and retries failed provisioning', async () => {
+    let key: string | undefined
+    let failProvision = true
+    const send: typeof fetch = async (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+      const data = z.record(z.string(), z.unknown()).parse(typeof init?.body === 'string' ? JSON.parse(init.body) : {})
+      if (url.pathname === '/model/info') return Response.json({ data: [{ model_name: 'approved-model' }, { model_name: 'next-model' }] })
+      if (url.pathname === '/key/info') return key === undefined ? Response.json({}, { status: 404 }) : Response.json({ info: {} })
+      if (url.pathname === '/key/generate') {
+        if (failProvision) return Response.json({}, { status: 503 })
+        key = z.string().parse(data.key)
+        return Response.json({ key })
+      }
+      return Response.json({ ok: true })
+    }
+    const { request, login, server } = await fixture('managed', send)
+    const admin = await login('admin@example.test', 'test-admin-password')
+    const created = await request('/v1/admin/employees', admin, { name: 'Alice', email: 'alice@example.test', password: 'test-alice-password', role: 'user' })
+    const { user } = z.object({ user: z.object({ id: z.string() }) }).parse(await created.json())
+    const employee = await login('alice@example.test', 'test-alice-password')
+    expect((await request('/v1/admin/platform-default', admin, provisioning)).status).toBe(409)
+    expect((await request('/v1/admin/platform-default', admin, { ...provisioning, mode: 'managed', models: [{ ...provisioning.models[0], id: 'forbidden' }], defaultModel: 'forbidden' })).status).toBe(403)
+    expect((await request('/v1/admin/platform-default', admin, { ...provisioning, mode: 'managed' })).status).toBe(200)
+    expect((await request('/v1/session', employee)).status).toBe(503)
+    expect((await server.store.assignment(user.id))?.gateway_state).toBe('unconfigured')
+    failProvision = false
+    const session = enterpriseSessionSchema.parse(await (await request('/v1/session', employee)).json())
+    expect(session.provisioning.apiKey).toMatch(/^entm_/u)
+    expect(session.provisioning.apiKey).not.toBe(key)
+    expect((await request('/v1/chat/completions', session.provisioning.apiKey, { model: 'approved-model' })).status).toBe(200)
+    const previousKey = key
+    expect((await request('/v1/admin/platform-default', admin, { ...provisioning, mode: 'managed', models: [{ ...provisioning.models[0], id: 'next-model' }], defaultModel: 'next-model' })).status).toBe(200)
+    expect((await request('/v1/chat/completions', session.provisioning.apiKey, { model: 'approved-model' })).status).toBe(403)
+    expect(enterpriseSessionSchema.parse(await (await request('/v1/session', employee)).json()).provisioning.defaultModel).toBe('next-model')
+    expect(key).toBe(previousKey)
+    expect((await request('/v1/chat/completions', session.provisioning.apiKey, { model: 'approved-model' })).status).toBe(403)
+    expect((await request('/v1/chat/completions', session.provisioning.apiKey, { model: 'next-model' })).status).toBe(200)
+  })
+
   it('persists departments and membership, rejects invalid references, and protects populated departments', async () => {
     const { request, login, pool } = await fixture()
     const admin = await login('admin@example.test', 'test-admin-password')
@@ -86,7 +187,7 @@ describe('enterprise service', () => {
     for (const input of [{ name: ' ', description: '' }, { name: 'x'.repeat(101), description: '' }, { name: 'Invalid', description: 'x'.repeat(501) }, { name: 'Invalid', description: '', role: 'admin' }]) {
       expect((await request('/v1/admin/departments', admin, input)).status).toBe(400)
     }
-    const departmentSchema = z.object({ id: z.uuid(), name: z.string(), description: z.string(), memberCount: z.number() })
+    const departmentSchema = z.object({ id: z.uuid(), name: z.string(), description: z.string(), parentId: z.uuid().nullable(), memberCount: z.number() })
     const addDepartment = async (name: string) => {
       const response = await request('/v1/admin/departments', admin, { name, description: 'Team description' })
       expect(response.status).toBe(201)

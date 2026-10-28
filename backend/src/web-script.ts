@@ -13,7 +13,7 @@ function preference(key, value) {
 }
 const language = new URLSearchParams(location.search).get('lang') || preference('enterprise-language') || (navigator.language.startsWith('zh') ? 'zh' : 'en');
 const t = copy[language === 'zh' ? 'zh' : 'en'];
-const state = { employees: [], departments: [], mode: 'basic', viewerId: '', page: 1, route: 'overview', revision: 0, editing: null };
+const state = { employees: [], departments: [], collapsedDepartments: new Set(), platformDefault: null, mode: 'basic', viewerId: '', page: 1, route: 'overview', revision: 0, editing: null };
 const routes = { overview: ['overview', 'overviewDescription'], users: ['userManagement', 'usersDescription'], departments: ['departments', 'departmentsDescription'], models: ['modelConfiguration', 'modelsDescription'], usage: ['budgetUsage', 'usageDescription'] };
 const paths = {
   command: 'M9 7V5a2 2 0 1 0-2 2h10a2 2 0 1 0-2-2v14a2 2 0 1 0 2-2H7a2 2 0 1 0 2 2V7',
@@ -58,11 +58,12 @@ function notice(message, error = false) {
   if ($('workspace').hidden) document.body.append(el); else $('content').insertBefore(el, $('page-overview'));
 }
 function lock() {
-  state.revision++; state.employees = []; state.departments = []; state.viewerId = ''; state.editing = null;
+  state.revision++; state.employees = []; state.departments = []; state.collapsedDepartments.clear(); state.platformDefault = null; state.viewerId = ''; state.editing = null;
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   $('assignment-form').reset(); $('models').replaceChildren(); $('editor-fields').replaceChildren();
   $('employees').replaceChildren(); $('departments').replaceChildren(); $('model-assignments').replaceChildren();
   $('recent-users').replaceChildren(); $('usage-result').replaceChildren();
+  $('platform-default-summary').replaceChildren();
   $('profile-name').textContent = ''; $('profile-email').textContent = '';
   $('workspace').hidden = true; $('login').hidden = false; setMenu(false);
 }
@@ -103,9 +104,10 @@ function setOptions(select, options, selected = select.value) { select.replaceCh
 function employeePath(user, operation) { return '/v1/admin/employees/' + encodeURIComponent(user.id) + '/' + operation; }
 async function refresh() {
   const revision = ++state.revision;
-  const [data, departments] = await Promise.all([api('/v1/admin/employees'), api('/v1/admin/departments')]);
+  const [data, departments, defaults] = await Promise.all([api('/v1/admin/employees'), api('/v1/admin/departments'), api('/v1/admin/platform-default')]);
   if (revision !== state.revision) return;
   state.employees = data.employees; state.departments = departments.departments; state.mode = data.mode; state.viewerId = data.viewerId;
+  state.platformDefault = defaults.configuration;
   $('login').hidden = true; $('workspace').hidden = false;
   const viewer = state.employees.find(user => user.id === state.viewerId);
   $('profile-name').textContent = viewer?.name || t.administrator; $('profile-email').textContent = viewer?.email || '';
@@ -114,7 +116,7 @@ async function refresh() {
   $('sidebar-mode').textContent = $('footer-mode').textContent = t[state.mode + 'Label'];
   $('mode').textContent = $('model-mode').textContent = t[state.mode];
   $('department-count').textContent = state.departments.length; $('user-count').textContent = state.employees.length;
-  setOptions($('department-filter'), [[t.allDepartments, ''], [t.unassigned, 'unassigned'], ...state.departments.map(d => [d.name, d.id])]);
+  setOptions($('department-filter'), [[t.allDepartments, ''], [t.unassigned, 'unassigned'], ...departmentOptions()]);
   const selected = $('budget-form').elements.userId.value;
   setOptions($('budget-form').elements.userId, state.employees.map(user => [user.name + ' · ' + user.email, user.id]), selected);
   render(); navigate(false);
@@ -152,19 +154,41 @@ function renderUsers() {
   $('user-page').textContent = format('pageCount', { page: state.page, pages });
   $('previous-page').disabled = state.page <= 1; $('next-page').disabled = state.page >= pages;
 }
+function departmentRows() {
+  const rows = [];
+  const visit = (parentId, ancestors) => {
+    for (const department of state.departments.filter(d => d.parentId === parentId)) {
+      rows.push({ department, ancestors }); visit(department.id, [...ancestors, department]);
+    }
+  };
+  visit(null, []); return rows;
+}
+function departmentOptions(exclude) {
+  return departmentRows().filter(({ department, ancestors }) => department.id !== exclude && !ancestors.some(d => d.id === exclude)).map(({ department, ancestors }) => [[...ancestors, department].map(d => d.name).join(' / '), department.id]);
+}
 function renderDepartments() {
   const members = state.departments.reduce((count, department) => count + department.memberCount, 0);
   $('department-stats').replaceChildren(stat(t.totalDepartments, state.departments.length, t.departmentsHint, 'building'), stat(t.assignedMembers, members, t.assignedMembersHint, 'users'), stat(t.unassignedMembers, state.employees.filter(user => !user.departmentId).length, t.unassignedMembersHint, 'users'));
   const search = $('department-search').value.trim().toLocaleLowerCase();
-  const departments = state.departments.filter(d => (d.name + ' ' + d.description).toLocaleLowerCase().includes(search));
-  $('departments').replaceChildren(...departments.map(department => {
-    const row = node('tr'); const name = node('div', 'identity'); name.append(icon('building'), node('strong', '', department.name));
+  const rows = departmentRows(); const matched = new Set();
+  for (const { department, ancestors } of rows) if ((department.name + ' ' + department.description).toLocaleLowerCase().includes(search)) [department, ...ancestors].forEach(d => matched.add(d.id));
+  const departments = rows.filter(({ department, ancestors }) => search ? matched.has(department.id) : !ancestors.some(d => state.collapsedDepartments.has(d.id)));
+  $('departments').replaceChildren(...departments.map(({ department, ancestors }) => {
+    const row = node('tr'); const name = node('div', 'identity department-name');
+    for (const ancestor of ancestors) { const indent = node('span', 'tree-indent'); indent.setAttribute('aria-hidden', 'true'); name.append(indent); }
+    const hasChildren = state.departments.some(d => d.parentId === department.id); const expanded = Boolean(search) || !state.collapsedDepartments.has(department.id);
+    if (hasChildren) {
+      const toggle = action('', () => { if (expanded) state.collapsedDepartments.add(department.id); else state.collapsedDepartments.delete(department.id); renderDepartments(); }, 'tree-toggle' + (expanded ? ' expanded' : ''));
+      toggle.setAttribute('aria-expanded', String(expanded)); toggle.setAttribute('aria-label', format(expanded ? 'collapseDepartment' : 'expandDepartment', { name: department.name })); toggle.disabled = Boolean(search); toggle.append(icon('arrow')); name.append(toggle);
+    } else name.append(node('span', 'tree-spacer'));
+    name.append(icon('building'), node('strong', '', department.name));
     const count = action(String(department.memberCount), () => { $('department-filter').value = department.id; state.page = 1; renderUsers(); go('users'); }, 'text-button'); count.setAttribute('aria-label', department.name + ' · ' + t.members + ': ' + department.memberCount);
-    const buttons = node('div', 'row-actions'); buttons.append(action(t.editDepartment, () => editDepartment(department)), action(t.deleteDepartment, () => deleteDepartment(department), 'text-button danger'));
+    const buttons = node('div', 'row-actions'); buttons.append(action(t.addChildDepartment, () => editDepartment(undefined, department.id)), action(t.editDepartment, () => editDepartment(department)), action(t.deleteDepartment, () => deleteDepartment(department), 'text-button danger'));
     row.append(cell(name), cell(department.description || '—', 'department-description'), cell(count), cell(buttons)); return row;
   })); $('department-empty').hidden = departments.length !== 0;
 }
 function renderModels() {
+  $('platform-default-summary').textContent = state.platformDefault ? state.platformDefault.models.map(model => model.name).join(' · ') + ' · ' + state.platformDefault.defaultModel : t.platformDefaultMissing;
   const configured = state.employees.filter(user => user.assignment); const modelIds = new Set(configured.flatMap(user => user.assignment.models.map(model => model.id)));
   $('model-stats').replaceChildren(stat(t.uniqueModels, modelIds.size, t.uniqueModelsHint, 'boxes'), stat(t.configuredUsers, configured.length, t.configuredHint, 'shield'), stat(t.unconfiguredUsers, state.employees.length - configured.length, t.unconfiguredHint, 'users'));
   const search = $('model-search').value.trim().toLocaleLowerCase();
@@ -172,6 +196,7 @@ function renderModels() {
   $('model-assignments').replaceChildren(...users.map(user => {
     const row = node('tr'); const models = node('div', 'badge-list');
     if (user.assignment) user.assignment.models.forEach(model => models.append(badge(model.name))); else models.append(badge(t.unconfigured, 'warning'));
+    models.append(badge(user.assignmentSource === 'platform' ? t.platformDefault : t.personalAssignment, 'neutral'));
     const endpoint = node('div'); endpoint.append(node('span', 'endpoint', user.assignment?.baseURL || '—'), node('small', 'protocol-label', user.assignment?.api || ''));
     const actions = node('div', 'row-actions'); actions.append(action(t.configure, () => edit(user)));
     row.append(cell(identity(user)), cell(models), cell(endpoint), cell(user.assignment?.defaultModel || '—'), cell(actions)); return row;
@@ -217,7 +242,7 @@ for (const dialog of document.querySelectorAll('dialog')) {
 }
 function field(label, name, type = 'text', value = '') {
   const wrapper = node('label', '', label); const input = node(type === 'textarea' ? 'textarea' : type === 'select' ? 'select' : 'input');
-  input.name = name; if (input.tagName === 'INPUT') input.type = type; input.value = value; input.required = true; wrapper.append(input); return { wrapper, input };
+  input.name = name; input.setAttribute('aria-label', label); if (input.tagName === 'INPUT') input.type = type; input.value = value; input.required = true; wrapper.append(input); return { wrapper, input };
 }
 function editor(title, description, build, submit, label = t.save, danger = false) {
   const form = $('editor-form'); form.reset(); $('editor-fields').replaceChildren(); $('editor-notice').hidden = true;
@@ -234,16 +259,18 @@ function createEmployee() {
     body.append(name.wrapper, email.wrapper, password.wrapper, role.wrapper);
   }, data => mutation('/v1/admin/employees', data), t.createEmployee);
 }
-function editDepartment(department) {
+function editDepartment(department, parentId = null) {
   editor(department ? t.editDepartment : t.createDepartment, t.createDepartmentDescription, body => {
     const name = field(t.departmentName, 'name', 'text', department?.name || ''); name.input.maxLength = 100;
     const description = field(t.description, 'description', 'textarea', department?.description || ''); description.input.maxLength = 500; description.input.required = false;
-    body.append(name.wrapper, description.wrapper);
-  }, data => mutation('/v1/admin/departments' + (department ? '/' + encodeURIComponent(department.id) : ''), data), department ? t.save : t.createDepartment);
+    const parent = field(t.parentDepartment, 'parentId', 'select'); parent.input.required = false;
+    setOptions(parent.input, [[t.rootDepartment, ''], ...departmentOptions(department?.id)], department?.parentId || parentId || '');
+    body.append(parent.wrapper, name.wrapper, description.wrapper);
+  }, data => mutation('/v1/admin/departments' + (department ? '/' + encodeURIComponent(department.id) : ''), { ...data, parentId: data.parentId || null }), department ? t.save : t.createDepartment);
 }
 function deleteDepartment(department) { editor(t.deleteDepartment, department.name, body => body.append(node('p', '', department.memberCount ? t.department_not_empty : t.confirmDeleteDepartment)), () => mutation('/v1/admin/departments/' + encodeURIComponent(department.id) + '/delete', {}), t.deleteDepartment, true); }
 function changeDepartment(user) {
-  editor(t.changeDepartment, user.name + ' · ' + t.departmentHelp, body => { const select = field(t.department, 'departmentId', 'select'); select.input.required = false; setOptions(select.input, [[t.unassigned, ''], ...state.departments.map(d => [d.name, d.id])], user.departmentId || ''); body.append(select.wrapper); }, data => mutation(employeePath(user, 'department'), { departmentId: data.departmentId || null }));
+  editor(t.changeDepartment, user.name + ' · ' + t.departmentHelp, body => { const select = field(t.department, 'departmentId', 'select'); select.input.required = false; setOptions(select.input, [[t.unassigned, ''], ...departmentOptions()], user.departmentId || ''); body.append(select.wrapper); }, data => mutation(employeePath(user, 'department'), { departmentId: data.departmentId || null }));
 }
 function resetPassword(user) {
   editor(t.reset, user.name + ' · ' + t.passwordDescription, body => { const password = field(t.newPassword, 'password', 'password'); password.input.minLength = 12; password.input.maxLength = 128; password.input.autocomplete = 'new-password'; body.append(password.wrapper); }, data => mutation(employeePath(user, 'password'), data));
@@ -260,13 +287,14 @@ function chooseEmployee() {
 }
 async function edit(user) {
   if (state.mode === 'managed') { const catalog = await api('/v1/admin/models'); $('gateway-models').replaceChildren(...catalog.models.map(id => new Option(id, id))); }
-  state.editing = user; const form = $('assignment-form'); form.reset(); $('models').replaceChildren(); $('assignment-notice').hidden = true;
-  $('assignment-title').textContent = user.name + ' · ' + t.modelConfiguration;
+  state.editing = user; const configuration = user ? user.assignment : state.platformDefault; const form = $('assignment-form'); form.reset(); $('models').replaceChildren(); $('assignment-notice').hidden = true;
+  $('assignment-title').textContent = user ? user.name + ' · ' + t.modelConfiguration : t.platformDefault;
+  $('inherit-assignment').hidden = !user; $('inherit-assignment').disabled = !state.platformDefault;
   $('key-field').hidden = state.mode === 'managed'; form.elements.apiKey.required = state.mode === 'basic';
-  form.elements.baseURL.value = user.assignment?.baseURL || location.origin + '/v1'; form.elements.baseURL.readOnly = state.mode === 'managed';
-  form.elements.api.value = user.assignment?.api || 'openai-completions';
-  for (const model of user.assignment?.models || [undefined]) addModel(model);
-  if (user.assignment) form.elements.defaultModel.value = user.assignment.defaultModel;
+  form.elements.baseURL.value = configuration?.baseURL || location.origin + '/v1'; form.elements.baseURL.readOnly = state.mode === 'managed';
+  form.elements.api.value = configuration?.api || 'openai-completions';
+  for (const model of configuration?.models || [undefined]) addModel(model);
+  if (configuration) form.elements.defaultModel.value = configuration.defaultModel;
   $('assignment').showModal();
 }
 function addModel(value = { id: '', name: '', contextWindow: 128000, maxTokens: 8192, input: ['text'] }) {
@@ -284,8 +312,12 @@ $('assignment').addEventListener('close', () => { $('assignment-form').reset(); 
 $('editor').addEventListener('close', () => { $('editor-form').reset(); });
 $('assignment-form').onsubmit = event => { event.preventDefault(); run(event.submitter, async () => {
   const data = fields(event.target); const models = [...$('models').querySelectorAll('fieldset')].map(group => { const get = name => group.querySelector('[name=' + name + ']').value; return { id: get('id'), name: get('name'), contextWindow: Number(get('contextWindow')), maxTokens: Number(get('maxTokens')), input: get('input') === 'image' ? ['text', 'image'] : ['text'] }; });
-  await mutation(employeePath(state.editing, 'assignment'), { mode: state.mode, baseURL: data.baseURL, api: data.api, apiKey: state.mode === 'managed' ? 'server-managed' : data.apiKey, models, defaultModel: data.defaultModel }, 'assignment');
+  await mutation(state.editing ? employeePath(state.editing, 'assignment') : '/v1/admin/platform-default', { mode: state.mode, baseURL: data.baseURL, api: data.api, apiKey: state.mode === 'managed' ? 'server-managed' : data.apiKey, models, defaultModel: data.defaultModel }, 'assignment');
 }); };
+$('configure-platform-default').onclick = () => run($('configure-platform-default'), () => edit(null));
+$('inherit-assignment').onclick = () => run($('inherit-assignment'), () => mutation(employeePath(state.editing, 'assignment'), { usePlatformDefault: true }, 'assignment'));
+$('expand-departments').onclick = () => { state.collapsedDepartments.clear(); renderDepartments(); };
+$('collapse-departments').onclick = () => { state.departments.forEach(d => state.collapsedDepartments.add(d.id)); renderDepartments(); };
 $('login-form').onsubmit = event => { event.preventDefault(); run(event.submitter, async () => { await api('/api/auth/sign-in/email', fields(event.target)); event.target.reset(); await refresh(); }); };
 $('refresh').onclick = () => run($('refresh'), refresh);
 $('logout').onclick = () => run($('logout'), async () => { await api('/api/auth/sign-out', {}); lock(); $('login-form').elements.email.focus(); });

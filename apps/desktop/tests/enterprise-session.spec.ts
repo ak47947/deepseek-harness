@@ -329,14 +329,12 @@ describe('enterprise desktop accounts', () => {
         payload: { args: Record<string, unknown> }
       }
       calls.push({ method: envelope.method, args: envelope.payload.args })
-      return Response.json({ type: 'server-response', rpcId: envelope.rpcId, result: { ok: true, value: {} } })
+      return Response.json({ type: 'server-response', rpcId: envelope.rpcId, result: { ok: true, value: envelope.method === 'settings/describe' ? { namespaces: [{ ns: 'agent-default-model', revision: 1, value: { provider: 'enterprise' } }] } : {} } })
     }
     await rotateEnterpriseModel('http://127.0.0.1:1234', send, next, () => true)
-    expect(calls.map(call => call.method)).toEqual(['credentials/set', 'settings/replace', 'settings/update'])
+    expect(calls.map(call => call.method)).toEqual(['credentials/set', 'settings/mutate', 'settings/describe', 'settings/update'])
     expect(calls[1]?.args).toMatchObject({
-      section: {
-        providers: { enterprise: { baseURL: next.provisioning.baseURL, apiKeyEnv: enterpriseCredentialRef(next) } },
-      },
+      ops: [{ op: 'set', path: ['providers', 'enterprise'], value: { baseURL: next.provisioning.baseURL, apiKeyEnv: enterpriseCredentialRef(next) } }],
     })
     expect(calls.some(call => call.method.includes('unset'))).toBe(false)
   })

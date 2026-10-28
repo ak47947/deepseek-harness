@@ -24,7 +24,7 @@ const en = {
   departmentHelp: 'Department membership organizes accounts. Model permissions and budgets are configured per employee.',
   changeDepartment: 'Change department', deleteDepartment: 'Delete department', confirmDeleteDepartment: 'Delete this empty department? This action cannot be undone.',
   department_name_exists: 'A department with this name already exists. Choose another name.',
-  department_not_empty: 'This department still has members. Move its members before deleting it.',
+  department_not_empty: 'This department has members or child departments. Move them before deleting it.',
   department_not_found: 'This department no longer exists. Refresh and choose an existing department.',
   employee_not_found: 'This employee no longer exists. Refresh the directory.',
   searchUsers: 'Search name or email…', searchDepartments: 'Search departments…', searchModels: 'Search employee or model…',
@@ -65,6 +65,13 @@ const en = {
   mainNavigation: 'Main navigation', skipContent: 'Skip to content', createEmployeeHint: 'Add a new member to your workspace',
   departmentSetupHint: 'Organize your team into departments', modelSetupHint: 'Assign models and provider access',
   loading: 'Loading…',
+  parentDepartment: 'Parent department', rootDepartment: 'Top-level department', addChildDepartment: 'Add child department',
+  expandDepartment: 'Expand {name}', collapseDepartment: 'Collapse {name}', expandAll: 'Expand all', collapseAll: 'Collapse all',
+  department_cycle: 'A department cannot be placed under itself or one of its descendants. Choose another parent.',
+  platformDefault: 'Platform default models', configurePlatformDefault: 'Configure platform default',
+  platformDefaultDescription: 'Employees without a personal assignment inherit these models. Changes apply at their next configuration sync.',
+  platformDefaultMissing: 'Configure platform default models so employees without an assignment can use Desktop.',
+  usePlatformDefault: 'Use platform default', personalAssignment: 'Personal assignment',
 }
 
 const zh: Record<keyof typeof en, string> = {
@@ -92,7 +99,7 @@ const zh: Record<keyof typeof en, string> = {
   departmentHelp: '部门用于组织成员，模型权限与额度仍按成员单独配置。',
   changeDepartment: '调整部门', deleteDepartment: '删除部门', confirmDeleteDepartment: '确定删除此空部门？删除后无法恢复。',
   department_name_exists: '已存在同名部门，请使用其他名称。',
-  department_not_empty: '该部门仍有成员，请先调整成员归属再删除。',
+  department_not_empty: '该部门仍有成员或子部门，请先调整其归属再删除。',
   department_not_found: '该部门已不存在，请刷新后选择现有部门。',
   employee_not_found: '该成员已不存在，请刷新用户列表。',
   searchUsers: '搜索姓名或邮箱…', searchDepartments: '搜索部门…', searchModels: '搜索成员或模型…',
@@ -133,6 +140,13 @@ const zh: Record<keyof typeof en, string> = {
   mainNavigation: '主导航', skipContent: '跳转到内容', createEmployeeHint: '为工作空间添加新的成员',
   departmentSetupHint: '按部门组织企业团队', modelSetupHint: '分配模型与供应商访问权限',
   loading: '加载中…',
+  parentDepartment: '上级部门', rootDepartment: '顶级部门', addChildDepartment: '添加子部门',
+  expandDepartment: '展开 {name}', collapseDepartment: '收起 {name}', expandAll: '全部展开', collapseAll: '全部收起',
+  department_cycle: '不能将部门移动到自身或其子部门下，请选择其他上级部门。',
+  platformDefault: '平台默认模型', configurePlatformDefault: '配置平台默认模型',
+  platformDefaultDescription: '未单独配置的成员自动使用平台默认模型，修改后将在下次配置同步时生效。',
+  platformDefaultMissing: '请先配置平台默认模型，供未单独配置的成员使用桌面端。',
+  usePlatformDefault: '使用平台默认配置', personalAssignment: '用户单独配置',
 }
 
 /** Complete English and Chinese administration dictionaries. */

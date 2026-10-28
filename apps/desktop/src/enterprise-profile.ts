@@ -82,7 +82,6 @@ const disabled = [
   'session-telemetry-otel',
   'anonymous-user-id',
   'web-search-deepseek',
-  'ui-settings-models',
   'ui-brand-official',
   'cordis-host-runner',
   'cordis-client-runner',
@@ -110,11 +109,17 @@ export async function prepareEnterpriseProfile(
   const filename = join(paths.profile, 'cordis.patch.yml')
   await withFileLock(filename, async () => {
     const previous = loadOptionalPatches('dsh', filename) ?? []
-    const providers = enterpriseProviders(session)
+    const localConfiguration = z.record(z.string(), z.unknown()).parse(previous.find(row => row.id === 'llm-pi-ai')?.config ?? {})
+    const localProviders = z.record(z.string(), z.unknown()).parse(localConfiguration.providers ?? {})
+    const providers = { ...localProviders, ...enterpriseProviders(session) }
+    const localDefault = z.looseObject({ provider: z.string().optional() }).parse(previous.find(row => row.id === 'agent-default-model')?.config ?? {})
+    const defaultModel = localDefault.provider !== undefined && localDefault.provider !== 'enterprise'
+      ? localDefault : { ...localDefault, provider: 'enterprise', model: session.provisioning.defaultModel }
     const owned = [
       ...disabled.map(id => ({ id, disabled: true })),
-      { id: 'llm-pi-ai', disabled: false, config: { providers } },
-      { id: 'agent-default-model', config: { provider: 'enterprise', model: session.provisioning.defaultModel } },
+      { id: 'ui-settings-models', disabled: false },
+      { id: 'llm-pi-ai', disabled: false, config: { ...localConfiguration, providers } },
+      { id: 'agent-default-model', config: defaultModel },
     ]
     const ownedIds = new Set(owned.map(row => row.id))
     ownedIds.add('ui-settings-enterprise-account')

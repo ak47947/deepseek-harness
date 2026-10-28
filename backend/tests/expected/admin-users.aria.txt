@@ -3,6 +3,7 @@
   - option "All departments" [selected]
   - option "Unassigned"
   - option "Engineering"
+  - option "Engineering / Platform"
 - combobox "Filter by role":
   - option "All roles" [selected]
   - option "Administrator"

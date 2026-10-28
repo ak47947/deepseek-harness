@@ -50,7 +50,7 @@ describe('enterprise profile preparation', () => {
     })
     const paths = enterpriseAccountPaths(root, session)
     await mkdir(paths.profile, { recursive: true })
-    await writeFile(join(paths.profile, 'cordis.patch.yml'), '- id: locale\n  config:\n    preference: zh\n')
+    await writeFile(join(paths.profile, 'cordis.patch.yml'), '- id: locale\n  config:\n    preference: zh\n- id: llm-pi-ai\n  config:\n    providers:\n      personal:\n        api: openai-completions\n        baseURL: https://personal.example.test/v1\n- id: ui-settings-models\n  disabled: true\n')
     await writeFile(join(paths.home, '.credentials.yaml'), 'version: 1\nrefs:\n  PERSONAL_KEY: personal-test-key\n', {
       mode: 0o600,
     })
@@ -63,9 +63,11 @@ describe('enterprise profile preparation', () => {
     expect(patches.flatMap(row => row.insert ?? []).find(row => row.id === 'ui-settings-enterprise-account')?.name)
       .toBe(pathToFileURL(clientEntry).href)
     expect(patches.find(row => row.id === 'locale')?.config).toEqual({ preference: 'zh' })
+    expect(patches.find(row => row.id === 'ui-settings-models')?.disabled).toBe(false)
     const modelConfiguration: unknown = patches.find(row => row.id === 'llm-pi-ai')?.config
     expect(modelConfiguration).toMatchObject({
       providers: {
+        personal: { baseURL: 'https://personal.example.test/v1' },
         enterprise: {
           baseURL: session.provisioning.baseURL,
           apiKeyEnv: enterpriseCredentialRef(session),

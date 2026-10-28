@@ -1,0 +1,10 @@
+{
+  "providers": [
+    "enterprise",
+    "personal"
+  ],
+  "default": {
+    "provider": "personal",
+    "model": "personal-model"
+  }
+}

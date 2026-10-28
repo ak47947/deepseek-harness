@@ -1,0 +1,39 @@
+- heading "Platform default models" [level=2]
+- paragraph: Employees without a personal assignment inherit these models. Changes apply at their next configuration sync.
+- paragraph: Platform model · platform-model
+- button "Configure platform default"
+- text: Approved models 1
+- paragraph: Distinct model IDs across assignments
+- text: Model assignments 2
+- paragraph: Employees with model configuration
+- text: Awaiting configuration 0
+- paragraph: Accounts without model configuration
+- searchbox "Search employee or model…"
+- table:
+  - rowgroup:
+    - row "Employee Assigned models Provider API address Default model Actions":
+      - columnheader "Employee"
+      - columnheader "Assigned models"
+      - columnheader "Provider API address"
+      - columnheader "Default model"
+      - columnheader "Actions"
+  - rowgroup:
+    - row "Alice alice@example.test Platform model Platform default models https://platform.example.test/v1 openai-completions platform-model Models":
+      - cell "Alice alice@example.test":
+        - strong: Alice
+        - text: alice@example.test
+      - cell "Platform model Platform default models"
+      - cell "https://platform.example.test/v1 openai-completions"
+      - cell "platform-model"
+      - cell "Models":
+        - button "Models"
+    - row "Administrator admin@example.test Platform model Platform default models https://platform.example.test/v1 openai-completions platform-model Models":
+      - cell "Administrator admin@example.test":
+        - strong: Administrator
+        - text: admin@example.test
+      - cell "Platform model Platform default models"
+      - cell "https://platform.example.test/v1 openai-completions"
+      - cell "platform-model"
+      - cell "Models":
+        - button "Models"
+- paragraph: Requests go directly to the provider. Enterprise usage and budgets are unavailable.

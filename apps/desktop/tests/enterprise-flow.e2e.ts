@@ -60,19 +60,25 @@ async function fixture(session: EnterpriseSession, sharedRoot?: string) {
     expect(result, `${method}: ${JSON.stringify(result)}`).toMatchObject({ ok: accepted })
     return result
   }
-  return { account, host, ready, send, rpc }
+  return { root, account, host, ready, send, rpc }
 }
 
 it('boots the built enterprise profile and keeps old credential references during live endpoint rotation', { retry: 0 }, async () => {
   const session = enterpriseSessionSchema.parse({ enterpriseId: 'company', userId: 'alice', name: 'Alice', email: 'alice@example.test', role: 'user', expiresAt: '2026-10-29T00:00:00.000Z',
     provisioning: { mode: 'basic', api: 'openai-completions', baseURL: 'https://provider.example.test/v1', apiKey: 'initial-test-key',
       models: [{ id: 'approved', name: 'Approved', contextWindow: 128000, maxTokens: 8192, input: ['text'] }], defaultModel: 'approved' } })
-  const { account, host, ready, send } = await fixture(session)
+  const { root, account, host, ready, send, rpc } = await fixture(session)
+  const personal = { api: 'openai-completions', baseURL: 'https://personal.example.test/v1', apiKeyEnv: 'PERSONAL_KEY',
+    models: [{ id: 'personal-model', name: 'Personal model', contextWindow: 128000, maxTokens: 8192, input: ['text'] }] }
+  await rpc('settings/mutate', { ns: 'llm-pi-ai', ops: [{ op: 'set', path: ['providers', 'personal'], value: personal }] })
+  await rpc('credentials/set', { ref: 'PERSONAL_KEY', value: 'personal-test-key' })
+  await rpc('settings/update', { ns: 'agent-default-model', patch: { provider: 'personal', model: 'personal-model' } })
   const next = { ...session, provisioning: { ...session.provisioning, baseURL: 'https://next.example.test/v1', apiKey: 'rotated-test-key' } }
   await rotateEnterpriseModel(ready.url, send, next, () => true)
   const credentials = await readCredentialDocument(account.home)
   expect(credentials.refs[enterpriseCredentialRef(session)]).toBe('initial-test-key')
   expect(credentials.refs[enterpriseCredentialRef(next)]).toBe('rotated-test-key')
+  expect(credentials.refs.PERSONAL_KEY).toBe('personal-test-key')
   const patch = await readFile(join(account.profile, 'cordis.patch.yml'), 'utf8')
   expect(patch).toContain('https://next.example.test/v1')
   expect(patch).not.toContain('rotated-test-key')
@@ -80,6 +86,18 @@ it('boots the built enterprise profile and keeps old credential references durin
   expect(publicDocument).not.toContain('initial-test-key')
   expect(publicDocument).not.toContain('rotated-test-key')
   await host.stop(true)
+  const restarted = await fixture(next, root)
+  const described = z.object({ value: z.object({ namespaces: z.array(z.object({ ns: z.string(), value: z.unknown() })) }) })
+    .parse(await restarted.rpc('settings/describe', {})).value.namespaces
+  expect(described.find(row => row.ns === 'llm-pi-ai')?.value).toMatchObject({ providers: {
+    personal, enterprise: { baseURL: next.provisioning.baseURL },
+  } })
+  expect(described.find(row => row.ns === 'agent-default-model')?.value).toMatchObject({ provider: 'personal', model: 'personal-model' })
+  const providers = z.object({ providers: z.record(z.string(), z.unknown()) }).parse(described.find(row => row.ns === 'llm-pi-ai')?.value).providers
+  const summary = { providers: Object.keys(providers).sort(), default: described.find(row => row.ns === 'agent-default-model')?.value }
+  await expect(JSON.stringify(summary, null, 2) + '\n').toMatchFileSnapshot('./expected/enterprise-local-models.json')
+  expect((await readCredentialDocument(account.home)).refs.PERSONAL_KEY).toBe('personal-test-key')
+  await restarted.host.stop(true)
 })
 
 it('preserves each employee workspace and stored Session across account switching and Host restarts', { retry: 0 }, async () => {

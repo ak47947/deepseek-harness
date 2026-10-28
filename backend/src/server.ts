@@ -10,12 +10,12 @@ import { z } from 'zod'
 import { createEnterpriseAuth, type EnterpriseAuth, type AuthenticatedEmployee } from './auth.ts'
 import type { EnterpriseConfig } from './config.ts'
 import { EnterpriseSecrets } from './secrets.ts'
-import { EnterpriseStore } from './store.ts'
+import { EnterpriseStore, type AssignmentRow } from './store.ts'
 import { LiteLlmGateway } from './litellm.ts'
 import { enterpriseSessionSchema, provisioningSchema, EnterpriseRequestError } from './protocol.ts'
 import { adminDocument, adminScript, adminStyles } from './web.ts'
 import { EnterpriseDepartments, DepartmentRequestError, departmentIdSchema, departmentInputSchema } from './departments.ts'
-import type { EnterpriseUserId } from './protocol.ts'
+import type { EnterpriseUserId, Provisioning } from './protocol.ts'
 import {
   authorizationBrandSvg,
   authorizationDocument,
@@ -230,7 +230,8 @@ export class EnterpriseServer {
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    if (request.method === 'POST' && request.url?.startsWith('/v1/admin/')) {
+    if ((request.method === 'POST' && request.url?.startsWith('/v1/admin/')) ||
+      (request.method === 'GET' && request.url?.split('?')[0] === '/v1/session')) {
       const operation = this.administration.then(() => this.route(request, response))
       // Each following operation re-reads authoritative account and assignment state after the predecessor settles.
       this.administration = operation.catch((_error: unknown) => {})
@@ -290,6 +291,17 @@ export class EnterpriseServer {
       if (request.headers['sec-fetch-site'] === 'cross-site') throw new EnterpriseRequestError(403)
     }
     const employee = await this.employee(request, url.pathname.startsWith('/v1/admin/'))
+    if (url.pathname === '/v1/admin/platform-default') {
+      if (request.method === 'GET') {
+        const configuration = await this.store.platformDefault()
+        json(response, 200, { configuration: configuration === null ? null : { ...configuration, apiKey: undefined } })
+      } else if (request.method === 'POST') {
+        const configuration = await this.approvedConfiguration(provisioningSchema.parse(await body(request)))
+        await this.store.setPlatformDefault(configuration)
+        json(response, 200, { ok: true })
+      } else throw new EnterpriseRequestError(405)
+      return
+    }
     if (url.pathname === '/v1/admin/departments') {
       if (request.method === 'GET') json(response, 200, { departments: await this.departments.list() })
       else if (request.method === 'POST') json(response, 201, { department: await this.departments.create(departmentInputSchema.parse(await body(request))) })
@@ -313,7 +325,7 @@ export class EnterpriseServer {
       return
     }
     if (url.pathname === '/v1/session' && request.method === 'GET') {
-      const assigned = await this.store.assignment(employee.user.id)
+      const assigned = await this.resolveAssignment(employee.user.id)
       if (assigned === null || assigned.configuration.mode !== this.config.DSH_ENTERPRISE_MODE)
         throw new EnterpriseRequestError(409)
       if (this.gateway !== undefined && (assigned.gateway_state !== 'ready' || assigned.gateway_key === null))
@@ -342,15 +354,19 @@ export class EnterpriseServer {
       return
     }
     if (url.pathname === '/v1/admin/employees' && request.method === 'GET') {
+      const platformDefault = await this.store.platformDefault()
       const users = await this.database.query(
         'SELECT u.id, u.name, u.email, u.role, u.banned, m.department_id AS "departmentId" FROM "user" u LEFT JOIN enterprise_department_member m ON m.user_id = u.id ORDER BY u."createdAt" DESC LIMIT 1000',
       )
       const rows = await Promise.all(
         users.rows.map(async (user: { id: string }) => {
           const assigned = await this.store.assignment(user.id)
+          const inherited = assigned === null || assigned.uses_platform_default
+          const configuration = inherited ? platformDefault : assigned.configuration
           return {
             ...user,
-            assignment: assigned === null ? null : { ...assigned.configuration, apiKey: undefined },
+            assignment: configuration === null ? null : { ...configuration, apiKey: undefined },
+            assignmentSource: inherited ? 'platform' : 'user',
             gatewayState: assigned?.gateway_state ?? 'unconfigured',
             managedSince: assigned?.managed_since?.toISOString() ?? null,
           }
@@ -388,26 +404,11 @@ export class EnterpriseServer {
       const input = z.object({ departmentId: departmentIdSchema.nullable() }).strict().parse(await body(request))
       await this.departments.assign(userId as EnterpriseUserId, input.departmentId)
     } else if (action === 'assignment') {
-      const configuration = provisioningSchema.parse(await body(request))
-      if (configuration.mode !== this.config.DSH_ENTERPRISE_MODE) throw new EnterpriseRequestError(409)
-      const previous = await this.store.assignment(userId)
-      if (this.gateway !== undefined) {
-        const available = await this.gateway.models()
-        if (configuration.models.some(model => !available.includes(model.id))) throw new EnterpriseRequestError(403)
-        await this.store.assign(userId, {
-          ...configuration,
-          apiKey: 'server-managed',
-          baseURL: `${this.config.DSH_ENTERPRISE_ORIGIN}/v1`,
-        })
-        const key = previous?.gateway_key ?? this.gateway.allocateKey()
-        await this.store.gateway(userId, key, 'unconfigured')
-        await this.gateway.provision(
-          userId,
-          configuration.models.map(model => model.id),
-          key,
-        )
-        await this.store.gateway(userId, key, 'ready')
-      } else await this.store.assign(userId, configuration)
+      const input = await body(request)
+      const inherit = z.object({ usePlatformDefault: z.literal(true) }).strict().safeParse(input).success
+      const configuration = inherit ? await this.store.platformDefault() : provisioningSchema.parse(input)
+      if (configuration === null) throw new EnterpriseRequestError(409)
+      await this.assignConfiguration(userId, await this.approvedConfiguration(configuration), inherit)
     } else if (action === 'password') {
       const input = z
         .object({ password: z.string().min(12).max(128) })
@@ -447,6 +448,38 @@ export class EnterpriseServer {
     json(response, 200, { ok: true })
   }
 
+  private async approvedConfiguration(configuration: Provisioning): Promise<Provisioning> {
+    if (configuration.mode !== this.config.DSH_ENTERPRISE_MODE) throw new EnterpriseRequestError(409)
+    if (this.gateway === undefined) return configuration
+    const available = await this.gateway.models()
+    if (configuration.models.some(model => !available.includes(model.id))) throw new EnterpriseRequestError(403)
+    return { ...configuration, apiKey: 'server-managed', baseURL: `${this.config.DSH_ENTERPRISE_ORIGIN}/v1` }
+  }
+
+  private async assignConfiguration(userId: string, configuration: Provisioning, inherited: boolean): Promise<void> {
+    const previous = await this.store.assignment(userId)
+    // A failed gateway update leaves this account unavailable until its next explicit retry or inherited refresh.
+    await this.store.assign(userId, configuration, inherited)
+    if (this.gateway === undefined) return
+    const key = previous?.gateway_key ?? this.gateway.allocateKey()
+    await this.store.gateway(userId, key, 'unconfigured')
+    await this.gateway.provision(userId, configuration.models.map(model => model.id), key)
+    await this.store.gateway(userId, key, 'ready')
+  }
+
+  private async resolveAssignment(userId: string): Promise<AssignmentRow | null> {
+    const assigned = await this.store.assignment(userId)
+    if (assigned !== null && !assigned.uses_platform_default) return assigned
+    const configuration = await this.store.platformDefault()
+    if (configuration === null || configuration.mode !== this.config.DSH_ENTERPRISE_MODE) return null
+    if (assigned === null || JSON.stringify(assigned.configuration) !== JSON.stringify(configuration) ||
+      (this.gateway !== undefined && (assigned.gateway_state !== 'ready' || assigned.gateway_key === null))) {
+      await this.assignConfiguration(userId, await this.approvedConfiguration(configuration), true)
+      return this.store.assignment(userId)
+    }
+    return assigned
+  }
+
   private async model(request: IncomingMessage, response: ServerResponse, path: string): Promise<void> {
     if (this.gateway === undefined) throw new EnterpriseRequestError(404)
     const bearer = request.headers.authorization?.replace(/^Bearer /iu, '')
@@ -473,6 +506,9 @@ export class EnterpriseServer {
       assigned.gateway_key === null ||
       assigned.gateway_state !== 'ready'
     )
+      throw new EnterpriseRequestError(403)
+    if (assigned.uses_platform_default &&
+      JSON.stringify(assigned.configuration) !== JSON.stringify(await this.store.platformDefault()))
       throw new EnterpriseRequestError(403)
     const input = z.looseObject({ model: z.string() }).parse(await body(request, 32 * 1024 * 1024))
     if (Object.keys(input).some(key => !modelFields.has(key))) throw new EnterpriseRequestError(400)
