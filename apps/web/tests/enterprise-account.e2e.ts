@@ -41,12 +41,14 @@ it.skipIf(webSnapshotMode() === 'record')(
       },
     })
     const paths = enterpriseAccountPaths(root, account)
-    await prepareEnterpriseProfile(paths, join(repository, 'apps/cli'), account, join(repository, 'packages/client/ui-settings-enterprise-account/lib/index.js'))
+    await prepareEnterpriseProfile(paths, account, join(repository, 'packages/client/ui-settings-enterprise-account/lib/index.js'), 'Atrix Harness')
     const scaffold = await launchWebScaffold({
       extraOverlayPath: join(paths.profile, 'cordis.patch.yml'),
       extraInstallAnchors: [join(repository, 'apps/desktop-host/package.json')],
     })
     onTestFinished(() => scaffold.close())
+    const identity = (await scaffold.ctx.systemPrompt.assemble()).sections.find(section => section.name === 'harness:identity')
+    expect(identity?.text).toBe('You are Atrix Harness, the enterprise AI assistant. Your name is Atrix Harness.')
     await seedSession(
       scaffold,
       await readFile(join(repository, 'snapshots/web/fresh-round-trip/session.v4.jsonl'), 'utf8'),
@@ -107,6 +109,10 @@ it.skipIf(webSnapshotMode() === 'record')(
     const workspace = page.getByRole('treeitem').first()
     await workspace.click()
     await page.getByRole('treeitem').nth(1).click()
+    await page.getByRole('button', { name: 'Plugins', exact: true }).click()
+    await page.getByRole('button', { name: 'View Web search', exact: true }).waitFor()
+    await compareOrRefreshGolden(join(expected, 'plugins.expected.md'),
+      await captureStableAria(page, '[data-plugin-panel]', scaffold.workspaceCwd), webSnapshotMode())
     expect(await page.getByRole('button', { name: 'Account menu', exact: true }).innerText()).toContain('Alice')
     await compareOrRefreshGolden(join(expected, 'launcher.expected.md'),
       await captureStableAria(page, 'button[aria-label="Account menu"]', scaffold.workspaceCwd), webSnapshotMode())
@@ -139,7 +145,7 @@ it.skipIf(webSnapshotMode() === 'record')(
       await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd),
       webSnapshotMode(),
     )
-    await page.getByRole('button', { name: 'Sign out and switch account', exact: true }).click()
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click()
     expect(
       await page.evaluate(() =>
         (globalThis as typeof globalThis & { enterpriseTest: { signOuts(): number } }).enterpriseTest.signOuts(),

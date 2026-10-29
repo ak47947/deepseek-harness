@@ -18,15 +18,15 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 ## 运行
 
-### 通过 `npm` 运行
+### 企业 Desktop
 
-安装 `Node.js`，然后运行：
+在仓库工作目录中运行：
 
 ```sh
-npx @deepseek-ai/dsh web
+pnpm run dev:desktop
 ```
 
-该命令默认会在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时还会用默认浏览器打开页面。通过 SSH 启动时只打印宿主机 URL，因为本地转发地址由 SSH 客户端或编辑器持有。传入 `--no-open` 可仅运行服务器而不打开浏览器。详见 [Web UI 指南](docs/user/guide/index.zh.md)。
+应用打开企业登录页，企业名与产品名默认为 `Atrix Harness`，服务地址默认为 `http://127.0.0.1:3090`。连接其他企业服务时编辑[桌面配置](apps/desktop/config/desktop.json)。独立 Web 启动方式已停用。
 
 <a id="run-from-source"></a>
 
@@ -39,10 +39,10 @@ git clone https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
-pnpm dsh web
+pnpm run start:desktop
 ```
 
-`pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+`pnpm run build` 会准备仓库产物。`pnpm run start:desktop` 会直接使用这些已构建产物，不会重新构建。
 
 ## 社区与支持
 
@@ -73,7 +73,7 @@ pnpm dsh web
 
 请先阅读[开发指南](docs/development.zh.md)与[架构文档](docs/architecture.zh.md)。
 
-`pnpm run dev:web` 会在一个终端里完成构建、启动，并在源码修改时重建 client bundle；`make help` 列出 Web 与 Desktop 对应的 Make target。完整表格见开发指南的「应用命令」一节。
+`pnpm run dev:desktop` 构建并启动企业应用，`make help` 列出桌面与构建命令。
 
 面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 

@@ -277,10 +277,10 @@ describe('enterprise service', () => {
     expect((await request('/api/auth/get-session', desktopToken)).status).toBe(200)
     expect((await request('/api/auth/enterprise/desktop/token', undefined, { code, codeVerifier: verifier })).status).toBe(400)
     expect((await request('/dsh/authorize')).status).toBe(200)
-    const brand = await request('/dsh/brand.svg')
+    const brand = await request('/dsh/brand.png')
     expect(brand.status).toBe(200)
-    expect(brand.headers.get('content-type')).toBe('image/svg+xml')
-    expect(await brand.text()).toContain('<svg')
+    expect(brand.headers.get('content-type')).toBe('image/png')
+    expect(Buffer.from(await brand.arrayBuffer()).subarray(0, 8)).toEqual(Buffer.from('89504e470d0a1a0a', 'hex'))
   })
 
   it.each(['https://outside.example/oauth/callback', 'http://127.0.0.1:12345/other', 'http://user@127.0.0.1:12345/oauth/callback'])(

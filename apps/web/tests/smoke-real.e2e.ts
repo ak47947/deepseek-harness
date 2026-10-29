@@ -317,7 +317,7 @@ describe('dsh web keyless CLI smoke', () => {
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--no-open', '--port', '0'],
+      ['--import', tsxLoader, join(REPO_ROOT, 'apps/web/tests/fixtures/desktop-renderer-host.mjs'), 'web', '--no-open', '--port', '0'],
       {
         cwd: sessionsDir,
         env: {
@@ -439,7 +439,7 @@ describe('dsh web keyless CLI smoke', () => {
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--no-open', '--port', '0'],
+      ['--import', tsxLoader, join(REPO_ROOT, 'apps/web/tests/fixtures/desktop-renderer-host.mjs'), 'web', '--no-open', '--port', '0'],
       {
         cwd: workspace,
         env: {
@@ -552,7 +552,7 @@ describe('dsh web keyless CLI smoke', () => {
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--no-open', '--port', '0'],
+      ['--import', tsxLoader, join(REPO_ROOT, 'apps/web/tests/fixtures/desktop-renderer-host.mjs'), 'web', '--no-open', '--port', '0'],
       {
         cwd: workspace,
         env: {
@@ -632,7 +632,7 @@ describe('dsh web keyless CLI smoke', () => {
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web',
+      ['--import', tsxLoader, join(REPO_ROOT, 'apps/web/tests/fixtures/desktop-renderer-host.mjs'), 'web',
         ...mode === 'ptc' ? ['--patch', join(REPO_ROOT, 'apps/cli/config/examples/ptc.yml')] : [],
         '--no-open', '--port', '0',
       ],
@@ -705,7 +705,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     child = spawn(
       process.execPath,
       [
-        '--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web',
+        '--import', tsxLoader, join(REPO_ROOT, 'apps/web/tests/fixtures/desktop-renderer-host.mjs'), 'web',
         // Launcher flags come first: the first token the launcher does not own
         // starts the web app's own arguments.
         // Pin the in-browser picker: the shipped `-auto` row would resolve to

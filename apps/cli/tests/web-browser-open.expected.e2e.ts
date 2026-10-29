@@ -8,7 +8,7 @@ import { execa } from 'execa'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url))
-const builtBin = join(repoRoot, 'apps/cli/lib/bin.js')
+const builtBin = join(repoRoot, 'apps/web/tests/fixtures/desktop-renderer-host.mjs')
 const frontendIndex = join(repoRoot, 'apps/web/dist/index.html')
 const openerHook = new URL('./fixtures/web-browser-open/register.mjs', import.meta.url).href
 const openingMessage = 'dsh web: opening the default browser; pass --no-open to disable'

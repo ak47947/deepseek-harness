@@ -51,7 +51,9 @@ describe('enterprise sidebar identity', () => {
     expect(screen.getByText('Alice')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
     expect(screen.getByText('alice@example.test')).toBeDefined()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out and switch account' }))
+    const signOutItem = screen.getByRole('menuitem', { name: 'Sign out' })
+    expect(signOutItem.querySelector('svg')).not.toBeNull()
+    fireEvent.click(signOutItem)
     await waitFor(() => { expect(signOut).toHaveBeenCalledOnce() })
   })
 })
@@ -123,7 +125,7 @@ describe('enterprise account settings', () => {
     expect(screen.queryByText('Alice')).toBeNull()
   })
 
-  it('uses the shell organization name without a vendor mark and contains failed brand reads', async () => {
+  it('uses the shell organization name and enterprise ribbon and contains failed brand reads', async () => {
     const { source } = bridge()
     const view = render(<EnterpriseBrand bridge={source} />)
     await screen.findByText(account.organization)
@@ -135,7 +137,9 @@ describe('enterprise account settings', () => {
     })
     expect(failed.container.textContent).toBe('')
     failed.unmount()
-    expect(EnterpriseBrandMark()).toBeNull()
+    const mark = render(<EnterpriseBrandMark size={24} />)
+    expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('24')
+    expect(mark.container.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('shows the organization before sign-in and ignores a late brand read after unmount', async () => {

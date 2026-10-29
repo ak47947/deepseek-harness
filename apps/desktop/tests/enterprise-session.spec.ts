@@ -65,7 +65,7 @@ async function harness(overrides: Partial<EnterpriseSessionOperations> = {}, sen
     root,
     {
       appId: 'test.enterprise.app',
-      productName: 'Enterprise test',
+      productName: 'Enterprise test', enterpriseName: 'Enterprise test',
       origin: 'http://127.0.0.1',
       syncIntervalMs: 1000,
       requestTimeoutMs: 1000, authorizationTimeoutMs: 300000,
@@ -179,7 +179,7 @@ describe('enterprise desktop accounts', () => {
       root,
       {
         appId: 'test.enterprise',
-        productName: 'Test',
+        productName: 'Test', enterpriseName: 'Test',
         origin: 'http://127.0.0.1',
         syncIntervalMs: 1000,
         requestTimeoutMs: 1000, authorizationTimeoutMs: 300000,
@@ -276,7 +276,7 @@ describe('enterprise desktop accounts', () => {
       root,
       {
         appId: 'test.enterprise',
-        productName: 'Test',
+        productName: 'Test', enterpriseName: 'Test',
         origin: 'http://127.0.0.1',
         syncIntervalMs: 1000,
         requestTimeoutMs: 1000, authorizationTimeoutMs: 300000,

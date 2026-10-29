@@ -15,8 +15,8 @@
   en: 31b091f6e3e95d8a
   zh: c9bb6288340809de
 /enterprise-agent-desktop-architecture-and-delivery-plan/1-initial-scope:
-  en: 6471f78fe0f7e0d1
-  zh: a544cea168f67449
+  en: 498aa9120ba05c2f
+  zh: f4443c848619c027
 /enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities:
   en: 3d70f90802d79867
   zh: c7aca25b0e255f07
@@ -30,14 +30,14 @@
   en: 9aec0b4ad6f448ea
   zh: 7138a89945ff3cc3
 /enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration:
-  en: 2c2040a0c7d2d6ee
-  zh: 58c9d7baa6812e7f
+  en: c07ff0f37ba7ddca
+  zh: d5a7be5d4fb19037
 /enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/sign-in-and-configuration-synchronization:
   en: 291cada15ec0b0f4
   zh: 574a013ece76147e
 /enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/accounts-and-local-data-isolation:
-  en: c47c7592ed63ad05
-  zh: 3ce9a6a6c20bd183
+  en: 10017214aceba96c
+  zh: b1976320e4ae6ad3
 /enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/sign-out-and-deactivation:
   en: 05567dfe61043ffb
   zh: 6094cb45e123a425
@@ -45,8 +45,8 @@
   en: 002118aa90fb323d
   zh: b5d36d06dc6e57fd
 /enterprise-agent-desktop-architecture-and-delivery-plan/6-local-execution-and-data-handling:
-  en: 21b62082a2e8d37c
-  zh: 83810e94795f8b92
+  en: 5cb2003486a32ca5
+  zh: b3ec79c478738b65
 /enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance:
   en: 638fd170d8eeea3a
   zh: fe8045e1df29b236
@@ -57,8 +57,8 @@
   en: f3d130727d4955da
   zh: 0408215c45e25d09
 /enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/required-acceptance-results:
-  en: 81e45712b41d7232
-  zh: 8ffc435e3f92fc1c
+  en: 881a43036d4592f7
+  zh: 040e94d5a7e73117
 /enterprise-agent-desktop-architecture-and-delivery-plan/8-future-extensions:
   en: 532f177cc2ef05b8
   zh: 039ca72e5656e1fe

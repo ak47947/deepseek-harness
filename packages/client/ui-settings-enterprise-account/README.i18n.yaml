@@ -15,11 +15,11 @@
   en: 07f3642294ee905d
   zh: c53a2da768c397d6
 /deepseek-ai-dsh-client-ui-settings-enterprise-account/use-this-package:
-  en: c171797aee73125b
-  zh: 9359cfd353b9fa10
+  en: 09d862c3dea0ea25
+  zh: d40edb98878e7c29
 /deepseek-ai-dsh-client-ui-settings-enterprise-account/understand-the-implementation:
-  en: 5e7a01cbbe201bff
-  zh: a76313b1301881ea
+  en: d66456713c147be1
+  zh: b2f03c523756e7ee
 /deepseek-ai-dsh-client-ui-settings-enterprise-account/further-exploration:
   en: 4ae2218cfc1abf24
   zh: fc18b4e14018decc
@@ -27,11 +27,20 @@
   en: 57bc572027bf4939
   zh: 2a8de25b82cb7512
 /deepseek-ai-dsh-client-ui-settings-enterprise-account/model-experience:
-  en: 56e8d19bb8b759a4
-  zh: e0bafe893baa37e1
-/deepseek-ai-dsh-client-ui-settings-enterprise-account/model-experience/kv-cache-effect:
-  en: 9229bbf05ddff124
-  zh: 172d2524c4f9c3c4
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-client-ui-settings-enterprise-account/model-experience/enterprise-agent-identity:
+  en: bb049121f02d2b1a
+  zh: 6f99e14a0121c620
+/deepseek-ai-dsh-client-ui-settings-enterprise-account/model-experience/enterprise-agent-identity/what-the-model-sees:
+  en: 5bef224a073e52b8
+  zh: 0ece4d445e932db5
+/deepseek-ai-dsh-client-ui-settings-enterprise-account/model-experience/enterprise-agent-identity/token-effect:
+  en: 9d5185d630c5514a
+  zh: e7cdd867955a4748
+/deepseek-ai-dsh-client-ui-settings-enterprise-account/model-experience/enterprise-agent-identity/kv-cache-effect:
+  en: c1e88e05db46b59d
+  zh: f95196461a9701cb
 /deepseek-ai-dsh-client-ui-settings-enterprise-account/known-limitations-and-deferred-work:
-  en: bec13daa42252efc
-  zh: 7fac55812f92a5e1
+  en: b7e52756b8d17c9e
+  zh: 4953fde007a33f6d

@@ -178,7 +178,7 @@ export async function collectCliHelp(
 
 async function collectHelp(): Promise<HelpPage[]> {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-cli-help-'))
-  const profiles = Object.keys(PROFILE_TEMPLATES)
+  const profiles = Object.keys(PROFILE_TEMPLATES).filter(profile => profile !== 'web')
   // Concurrent profile boots share the repository worker budget.
   const reader = prefetchHelp(async (args, signal) => {
     // Each invocation boots against its own empty Harness and agents homes.

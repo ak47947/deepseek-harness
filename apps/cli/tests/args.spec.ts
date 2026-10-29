@@ -21,46 +21,49 @@ function exitCode(argv: string[], manageDesktopProfile = false): number {
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('parseDshArgs', () => {
+  it.each([['web'], ['--profile', 'Web'], ['rescue', '--from-default-profile', 'web']])('rejects standalone Web startup %j', (...argv: string[]) => {
+    expect(exitCode(argv)).toBe(1)
+  })
   it('routes profile boots and shorthand, handing the rest to the app', () => {
     expect(parse(['--profile', 'tui'])).toEqual({ mode: 'profile', profile: 'tui', patches: [], args: [] })
     expect(parse(['--profile', 'tui', '--patch', 'a.yml', '--patch', 'b.yml']))
       .toEqual({ mode: 'profile', profile: 'tui', patches: ['a.yml', 'b.yml'], args: [] })
-    expect(parse(['--profile', 'rescue', '--from-default-profile', 'web']))
-      .toEqual({ mode: 'profile', profile: 'rescue', fromDefaultProfile: 'web', patches: [], args: [] })
-    expect(parse(['web'])).toEqual({ mode: 'profile', profile: 'web', patches: [], args: [] })
-    expect(parse(['web', '--patch', 'web.yml']))
-      .toEqual({ mode: 'profile', profile: 'web', patches: ['web.yml'], args: [] })
+    expect(parse(['--profile', 'rescue', '--from-default-profile', 'browser-test']))
+      .toEqual({ mode: 'profile', profile: 'rescue', fromDefaultProfile: 'browser-test', patches: [], args: [] })
+    expect(parse(['browser-test'])).toEqual({ mode: 'profile', profile: 'browser-test', patches: [], args: [] })
+    expect(parse(['browser-test', '--patch', 'web.yml']))
+      .toEqual({ mode: 'profile', profile: 'browser-test', patches: ['web.yml'], args: [] })
   })
 
   it('ends the launcher flags at the first token it does not own', () => {
     // App flags, including its -h, and positionals reach the app verbatim.
     expect(parse(['--profile', 'tui', '--resume', 'abc']))
       .toEqual({ mode: 'profile', profile: 'tui', patches: [], args: ['--resume', 'abc'] })
-    expect(parse(['--profile', 'web', '-h']))
-      .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['-h'] })
-    expect(parse(['web', '--host', '127.0.0.1', '--port', '8080', '--no-open', '--future-web-flag']))
-      .toEqual({ mode: 'profile', profile: 'web', patches: [], args: ['--host', '127.0.0.1', '--port', '8080', '--no-open', '--future-web-flag'] })
+    expect(parse(['--profile', 'browser-test', '-h']))
+      .toEqual({ mode: 'profile', profile: 'browser-test', patches: [], args: ['-h'] })
+    expect(parse(['browser-test', '--host', '127.0.0.1', '--port', '8080', '--no-open', '--future-web-flag']))
+      .toEqual({ mode: 'profile', profile: 'browser-test', patches: [], args: ['--host', '127.0.0.1', '--port', '8080', '--no-open', '--future-web-flag'] })
     expect(parse(['--profile', 'headless', 'run', 'the', 'tests']))
       .toEqual({ mode: 'profile', profile: 'headless', patches: [], args: ['run', 'the', 'tests'] })
     // Launcher flags placed after that boundary belong to the app too.
     expect(parse(['--profile', 'tui', '--patch', 'a.yml', '--resume', 'b', '--patch', 'late.yml']))
       .toEqual({ mode: 'profile', profile: 'tui', patches: ['a.yml'], args: ['--resume', 'b', '--patch', 'late.yml'] })
-    expect(parse(['--profile', 'rescue', '--resume', 'abc', '--from-default-profile', 'web']))
+    expect(parse(['--profile', 'rescue', '--resume', 'abc', '--from-default-profile', 'browser-test']))
       .toEqual({
         mode: 'profile',
         profile: 'rescue',
         patches: [],
-        args: ['--resume', 'abc', '--from-default-profile', 'web'],
+        args: ['--resume', 'abc', '--from-default-profile', 'browser-test'],
       })
-    expect(parse(['web', '--from-default-profile', 'web']))
-      .toEqual({ mode: 'profile', profile: 'web', fromDefaultProfile: 'web', patches: [], args: [] })
+    expect(parse(['browser-test', '--from-default-profile', 'browser-test']))
+      .toEqual({ mode: 'profile', profile: 'browser-test', fromDefaultProfile: 'browser-test', patches: [], args: [] })
   })
 
-  it.each(['web', 'headless', 'sdk', 'sdk-minimal', 'acp', 'tui', 'custom', 'run', 'help'])('expands %s without looking up profiles', (profile) => {
+  it.each(['browser-test', 'headless', 'sdk', 'sdk-minimal', 'acp', 'tui', 'custom', 'run', 'help'])('expands %s without looking up profiles', (profile) => {
     for (const args of [
-      [], ['task', 'words'], ['--help'], ['-h'], ['web'],
+      [], ['task', 'words'], ['--help'], ['-h'], ['browser-test'],
       ['--patch', 'a.yml', '--patch', 'b.yml'],
-      ['--from-default-profile', 'web', '--help'],
+      ['--from-default-profile', 'browser-test', '--help'],
       ['--dump-config'], ['--dump-default-config'], ['--dump-config-schema'],
       ['--patch', 'a.yml', '--resume', 'id', '--patch', 'late.yml'],
       ['--', '--help'], ['--', '--', 'task'],
@@ -74,7 +77,7 @@ describe('parseDshArgs', () => {
     expect(parse(['--profile', 'plugin'])).toMatchObject({ mode: 'profile', profile: 'plugin' })
     expect(parse(['--profile', 'x', 'plugin', 'add', 'y']))
       .toMatchObject({ mode: 'profile', profile: 'x', args: ['plugin', 'add', 'y'] })
-    expect(parse(['headless', 'web'])).toMatchObject({ profile: 'headless', args: ['web'] })
+    expect(parse(['headless', 'browser-test'])).toMatchObject({ profile: 'headless', args: ['browser-test'] })
     expect(exitCode(['--patch', 'a.yml', 'tui'])).toBe(1)
     expect(exitCode(['--', 'tui'])).toBe(1)
   })
@@ -95,10 +98,10 @@ describe('parseDshArgs', () => {
   })
 
   it.each([
-    ['web', '--profile', 'tui'],
-    ['--profile', 'web', '--profile', 'tui'],
+    ['browser-test', '--profile', 'tui'],
+    ['--profile', 'browser-test', '--profile', 'tui'],
     ['--profile=web', '--profile=web'],
-    ['plugin', '--profile', 'web', '--profile', 'tui', 'add', 'x'],
+    ['plugin', '--profile', 'browser-test', '--profile', 'tui', 'add', 'x'],
   ])('rejects repeated profile selection %j', (...argv: string[]) => {
     const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
     expect(exitCode(argv)).toBe(1)
@@ -106,8 +109,8 @@ describe('parseDshArgs', () => {
   })
 
   it('forwards late profile options to the application', () => {
-    expect(parse(['web', 'task', '--profile', 'tui']))
-      .toMatchObject({ profile: 'web', args: ['task', '--profile', 'tui'] })
+    expect(parse(['browser-test', 'task', '--profile', 'tui']))
+      .toMatchObject({ profile: 'browser-test', args: ['task', '--profile', 'tui'] })
   })
 
   it('routes the plugin pnpm forwarder', () => {
@@ -156,37 +159,37 @@ describe('parseDshArgs', () => {
   })
 
   it('routes profile and web config dumps', () => {
-    expect(parse(['--profile', 'web', '--dump-config']))
-      .toEqual({ mode: 'dump-config', profile: 'web', defaultOnly: false, patches: [] })
-    expect(parse(['--profile', 'web', '--dump-default-config']))
-      .toEqual({ mode: 'dump-config', profile: 'web', defaultOnly: true, patches: [] })
-    expect(parse(['--profile', 'rescue', '--from-default-profile', 'web', '--dump-config']))
+    expect(parse(['--profile', 'browser-test', '--dump-config']))
+      .toEqual({ mode: 'dump-config', profile: 'browser-test', defaultOnly: false, patches: [] })
+    expect(parse(['--profile', 'browser-test', '--dump-default-config']))
+      .toEqual({ mode: 'dump-config', profile: 'browser-test', defaultOnly: true, patches: [] })
+    expect(parse(['--profile', 'rescue', '--from-default-profile', 'browser-test', '--dump-config']))
       .toEqual({
         mode: 'dump-config',
         profile: 'rescue',
-        fromDefaultProfile: 'web',
+        fromDefaultProfile: 'browser-test',
         defaultOnly: false,
         patches: [],
       })
     expect(parse(['--profile', 'tui', '--dump-config', '--patch', 'x.yml']))
       .toEqual({ mode: 'dump-config', profile: 'tui', defaultOnly: false, patches: ['x.yml'] })
-    expect(parse(['web', '--dump-config']))
-      .toEqual({ mode: 'dump-config', profile: 'web', defaultOnly: false, patches: [] })
-    expect(parse(['web', '--dump-default-config']))
-      .toEqual({ mode: 'dump-config', profile: 'web', defaultOnly: true, patches: [] })
+    expect(parse(['browser-test', '--dump-config']))
+      .toEqual({ mode: 'dump-config', profile: 'browser-test', defaultOnly: false, patches: [] })
+    expect(parse(['browser-test', '--dump-default-config']))
+      .toEqual({ mode: 'dump-config', profile: 'browser-test', defaultOnly: true, patches: [] })
   })
 
   it('routes schema dumps with ordered overlays and explicit initialization', () => {
-    expect(parse(['--profile', 'web', '--dump-config-schema']))
-      .toEqual({ mode: 'dump-config-schema', profile: 'web', patches: [] })
-    expect(parse(['rescue', '--from-default-profile', 'web', '--patch', 'first.yml', '--dump-config-schema', '--patch', 'second.json']))
+    expect(parse(['--profile', 'browser-test', '--dump-config-schema']))
+      .toEqual({ mode: 'dump-config-schema', profile: 'browser-test', patches: [] })
+    expect(parse(['rescue', '--from-default-profile', 'browser-test', '--patch', 'first.yml', '--dump-config-schema', '--patch', 'second.json']))
       .toEqual({
         mode: 'dump-config-schema',
         profile: 'rescue',
-        fromDefaultProfile: 'web',
+        fromDefaultProfile: 'browser-test',
         patches: ['first.yml', 'second.json'],
       })
-    expect(parse(['web', '--port', '8080', '--dump-config-schema']))
+    expect(parse(['browser-test', '--port', '8080', '--dump-config-schema']))
       .toMatchObject({ mode: 'profile', args: ['--port', '8080', '--dump-config-schema'] })
   })
 
@@ -196,19 +199,19 @@ describe('parseDshArgs', () => {
     ['--dump-default-config', '--dump-config-schema'],
     ['--dump-config', '--dump-default-config', '--dump-config-schema'],
   ])('rejects competing dump flags %j', (...flags: string[]) => {
-    expect(exitCode(['web', ...flags])).toBe(1)
-    expect(exitCode(['--profile', 'web', ...flags.toReversed()])).toBe(1)
+    expect(exitCode(['browser-test', ...flags])).toBe(1)
+    expect(exitCode(['--profile', 'browser-test', ...flags.toReversed()])).toBe(1)
   })
 
   it.each([
     ['--dump-config-schema'],
     ['desktop', '--dump-config-schema'],
     ['--profile', 'Desktop', '--dump-config-schema'],
-    ['web', '--dump-config-schema', 'task'],
-    ['web', '--dump-config-schema', '--port', '8080'],
-    ['web', '--dump-config-schema', '--help'],
-    ['web', '--dump-config-schema', '--', '--patch', 'late.yml'],
-    ['web', '--dump-config-schema', '--patch='],
+    ['browser-test', '--dump-config-schema', 'task'],
+    ['browser-test', '--dump-config-schema', '--port', '8080'],
+    ['browser-test', '--dump-config-schema', '--help'],
+    ['browser-test', '--dump-config-schema', '--', '--patch', 'late.yml'],
+    ['browser-test', '--dump-config-schema', '--patch='],
     ['rescue', '--dump-config-schema', '--from-default-profile='],
   ])('rejects invalid schema dump inputs %j', (...argv: string[]) => {
     expect(exitCode(argv)).toBe(1)
@@ -227,14 +230,14 @@ describe('parseDshArgs', () => {
     expect(exitCode(['--profile', 'x', '--dump-default-config', '--patch', 'p.yml'])).toBe(1)
     expect(exitCode(['--profile', 'x', '--dump-config', 'task'])).toBe(1)
     expect(exitCode(['--bogus'])).toBe(1)
-    expect(exitCode(['web', '--dump-config', '--dump-default-config'])).toBe(1)
-    expect(exitCode(['web', '--dump-default-config', '--patch', 'w.yml'])).toBe(1)
-    expect(exitCode(['web', '--patch='])).toBe(1)
+    expect(exitCode(['browser-test', '--dump-config', '--dump-default-config'])).toBe(1)
+    expect(exitCode(['browser-test', '--dump-default-config', '--patch', 'w.yml'])).toBe(1)
+    expect(exitCode(['browser-test', '--patch='])).toBe(1)
     // A dump never runs app command-line providers, so it cannot show what
     // those flags would decide; printing a tree that differs from the same
     // invocation's boot would mislead.
-    expect(exitCode(['web', '--dump-config', '--port', '8080'])).toBe(1)
-    expect(exitCode(['--profile', 'web', '--dump-config', '-h'])).toBe(1)
+    expect(exitCode(['browser-test', '--dump-config', '--port', '8080'])).toBe(1)
+    expect(exitCode(['--profile', 'browser-test', '--dump-config', '-h'])).toBe(1)
     expect(exitCode(['plugin', 'add', 'x'])).toBe(1) // --profile required
     expect(exitCode(['plugin', '--profile', 'tui'])).toBe(1) // nothing to forward
     expect(exitCode(['plugin', '--profile', ''])).toBe(1)
@@ -244,7 +247,7 @@ describe('parseDshArgs', () => {
     expect(exitCode(['--profile', 'desktop', '--dump-config'])).toBe(1)
     expect(exitCode(['plugin', '--profile', 'desktop', 'add', 'x'])).toBe(1)
     expect(exitCode(['plugin', '--profile', 'Desktop', 'add', 'x'])).toBe(1)
-    expect(exitCode(['--from-default-profile', 'web', 'plugin', '--profile', 'x', 'add', 'y'])).toBe(1)
+    expect(exitCode(['--from-default-profile', 'browser-test', 'plugin', '--profile', 'x', 'add', 'y'])).toBe(1)
   })
 
   it('keeps its own help for an invocation with no app to hand it to', () => {

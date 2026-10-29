@@ -56,8 +56,6 @@ const EXECUTABLE_SOURCE_ALLOWLIST = new Map<string, string>([
 const ROOT_LAUNCHER_POLICIES = new Map<string, LauncherPolicy>([
   ['demo:ptc', { kind: 'dsh-wrapper', wrapper: 'scripts/demo-ptc.mjs' }],
   ['demo:inspector', { kind: 'dsh-direct' }],
-  ['start:web', { kind: 'dsh-direct' }],
-  ['dev:web', { kind: 'dsh-wrapper', wrapper: 'scripts/dev-web.ts' }],
 ])
 
 const SOURCE_PATTERNS = [
@@ -147,6 +145,10 @@ function rootLauncherViolations(root: string): string[] {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as RootManifest
   const failures: string[] = []
   for (const [name, commandValue] of Object.entries(manifest.scripts ?? {}).sort(([left], [right]) => left.localeCompare(right))) {
+    if (name === 'start:web' || name === 'dev:web') {
+      failures.push(`package.json scripts.${name}: standalone Web launchers are disabled; use enterprise Desktop`)
+      continue
+    }
     const policy = ROOT_LAUNCHER_POLICIES.get(name)
     if (policy === undefined) {
       if (name.startsWith('demo:')) {

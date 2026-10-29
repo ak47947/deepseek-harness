@@ -447,6 +447,7 @@ function makeHarness(
     if (key === 'conversation.chat.node') {
       return renderNodeSlot(key, owner as RoutedChatNodeOwner, opts as Parameters<NodeRenderer>[2])
     }
+    if (key === 'conversation.chat.running.mark') return opts?.fallback ?? null
     throw new Error(`Undeclared flow child: ${key}`)
   }
   const renderFactorySlot: PropsRenderFactories['renderFactorySlot'] = (name, owner) => {

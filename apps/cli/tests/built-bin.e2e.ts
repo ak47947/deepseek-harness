@@ -29,8 +29,6 @@ const SPAWN_TIMEOUT_MS = 60_000
 // prints what this manifest carries, so no test may pin it to a literal.
 const cliVersion = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version
 const dshBin = join(repoRoot, 'apps/cli/lib/bin.js')
-const invalidProvider = fileURLToPath(new URL('./fixtures/invalid-provider.cordis.yml', import.meta.url))
-const webReadyExitHook = new URL('./fixtures/web-browser-open/register.mjs', import.meta.url).href
 
 async function runBuiltBin(
   args: readonly string[] = [],
@@ -351,8 +349,8 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     expect(bare.stderr).toContain('--profile <name> is required')
     const help = await runBuiltBin(['--help'])
     expect(help.code).toBe(0)
-    await expect(help.stdout).toMatchFileSnapshot('./expected/launcher-help.txt')
-    expect(help.stdout).toContain('dsh --profile web')
+    await expect(`${help.stdout.trimEnd()}\n`).toMatchFileSnapshot('./expected/launcher-help.txt')
+    expect(help.stdout).not.toContain('dsh --profile web')
     expect(help.stdout).toContain('dsh plugin --profile')
     expect(help.stdout).not.toMatch(/^\s+(?:tui|meta|upgrade)\b/mu)
     for (const removed of [['--config', 'x.yml'], ['-p', 'task'], ['web', '--profile', 'tui']]) {
@@ -368,12 +366,9 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
         DSH_HOME: home,
         DSH_TELEMETRY_DISABLED: '1',
       })
-      expect(web.code).toBe(0)
-      expect(web.stderr).toBe('')
-      expect(web.stdout).toContain('Usage: dsh --profile web')
-      expect(web.stdout).toContain('--port <port>')
-      expect(web.stdout).toContain('--public-url <url>')
-      expect(web.stdout).not.toContain('dsh web: http://')
+      expect(web.code).toBe(1)
+      expect(web.stderr).toContain('standalone Web application is disabled')
+      expect(web.stdout).toBe('')
 
       const wildcardHost = await runBuiltBin(['web', '--host', '0.0.0.0'], {
         DSH_HOME: home,
@@ -672,16 +667,16 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     }
   }, SPAWN_TIMEOUT_MS + 30_000)
 
-  it('creates and then replaces a custom profile from the shipped web template before booting it', async () => {
+  it('creates and then replaces a custom profile from the shipped headless template before booting it', async () => {
     const home = mkdtempSync(join(tmpdir(), 'dsh-from-default-profile-'))
     try {
       const created = await runBuiltBin(
-        ['rescue', '--from-default-profile', 'web', '--help'],
+        ['rescue', '--from-default-profile', 'headless', '--help'],
         { DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' },
       )
       expect(created.code).toBe(0)
       expect(created.stderr).toBe('')
-      expect(created.stdout).toContain('Usage: dsh --profile web')
+      expect(created.stdout).toContain('Usage: dsh --profile headless')
 
       const dir = join(home, 'profiles', 'rescue')
       const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
@@ -690,14 +685,14 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       }
       expect(manifest.dependencies).toEqual({})
       expect(manifest.dsh.profile).toEqual({
-        bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
+        bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'],
       })
       expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')).toContain('[]')
       expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toContain('nodeLinker: hoisted')
 
       writeFileSync(join(dir, 'cordis.patch.yml'), '- id: local-change\n  disabled: true\n')
       const repeated = await runBuiltBin(
-        ['rescue', '--from-default-profile', 'web', '--help'],
+        ['rescue', '--from-default-profile', 'headless', '--help'],
         { DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' },
       )
       expect(repeated.code).toBe(0)
@@ -710,7 +705,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       )
       expect(reopened.code).toBe(0)
       expect(reopened.stderr).toBe('')
-      expect(reopened.stdout).toContain('Usage: dsh --profile web')
+      expect(reopened.stdout).toContain('Usage: dsh --profile headless')
     } finally {
       rmSync(home, { recursive: true, force: true })
     }
@@ -720,11 +715,11 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     const home = mkdtempSync(join(tmpdir(), 'dsh-from-default-profile-failed-boot-'))
     try {
       const failed = await runBuiltBin(
-        ['--profile', 'rescue', '--from-default-profile', 'web', '--port', 'not-a-number'],
+        ['--profile', 'rescue', '--from-default-profile', 'headless', '--reasoning-effort', 'not-a-mode'],
         { DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' },
       )
       expect(failed.code).toBe(1)
-      expect(failed.stderr).toContain('--port must be a number')
+      expect(failed.stderr).toContain('reasoning-effort')
       expect(existsSync(join(home, 'profiles', 'rescue', 'package.json'))).toBe(true)
 
       const retried = await runBuiltBin(
@@ -733,7 +728,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       )
       expect(retried.code).toBe(0)
       expect(retried.stderr).toBe('')
-      expect(retried.stdout).toContain('Usage: dsh --profile web')
+      expect(retried.stdout).toContain('Usage: dsh --profile headless')
     } finally {
       rmSync(home, { recursive: true, force: true })
     }
@@ -776,24 +771,6 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       await server.close()
       rmSync(home, { recursive: true, force: true })
       rmSync(project, { recursive: true, force: true })
-    }
-  }, SPAWN_TIMEOUT_MS + 30_000)
-
-  it('keeps serving when an optional patch-overlay plugin fails', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'dsh-invalid-patch-'))
-    try {
-      const result = await runBuiltBin(['--profile', 'web', '--patch', invalidProvider, '--port', '0', '--no-open'], {
-        DSH_HOME: home,
-        DSH_BROWSER_OPEN_TEST_EXIT_ON_READY: '1',
-        DEEPSEEK_API_KEY: 'keyless-invalid-config',
-        DSH_TELEMETRY_DISABLED: '1',
-        NODE_OPTIONS: `--import=${webReadyExitHook}`,
-      })
-      expect(result.code, result.stderr).toBe(0)
-      expect(result.stdout).toMatch(/^dsh web: http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_-]+$/u)
-      expect(result.stderr).toContain('llm-pi-ai')
-    } finally {
-      rmSync(home, { recursive: true, force: true })
     }
   }, SPAWN_TIMEOUT_MS + 30_000)
 

@@ -1,0 +1,12 @@
+.mark {
+  flex: none;
+  background: url('./assets/mark.png') center / contain no-repeat;
+  forced-color-adjust: none;
+}
+
+@media (forced-colors: active) {
+  .mark {
+    background: CanvasText;
+    mask: url('./assets/mark.png') center / contain no-repeat;
+  }
+}

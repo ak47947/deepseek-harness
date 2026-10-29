@@ -109,8 +109,7 @@ describe('application entrypoints', () => {
     write(root, 'package.json', JSON.stringify({ scripts: { 'start:web': 'node packages/example/app/src/bin.ts web' } }))
 
     expect(applicationEntrypointViolations(root)).toEqual([
-      'package.json scripts.start:web: application launcher script must launch apps/cli/src/bin.ts',
-      'package.json scripts.start:web: application launcher script must not launch a package entry directly',
+      'package.json scripts.start:web: standalone Web launchers are disabled; use enterprise Desktop',
     ])
   })
 
@@ -120,7 +119,7 @@ describe('application entrypoints', () => {
     write(root, 'scripts/dev-web.ts', "execa('vite', ['build', '--watch'])\n")
 
     expect(applicationEntrypointViolations(root)).toEqual([
-      'scripts/dev-web.ts: application launcher wrapper must launch apps/cli/src/bin.ts',
+      'package.json scripts.dev:web: standalone Web launchers are disabled; use enterprise Desktop',
     ])
   })
 

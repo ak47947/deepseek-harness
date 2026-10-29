@@ -1,6 +1,8 @@
 /** Enterprise sidebar identity using the same account launcher as the official account menu. */
 import { useRef, useState } from 'react'
-import { AccountLauncher, Menu, Toast, IconSettingsOutlineMedium, IconUserOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  AccountLauncher, Menu, Toast, IconSettingsOutlineMedium, IconUserOutlineMedium, LogoutIcon,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { EnterpriseAccountView } from '../types.ts'
@@ -52,7 +54,7 @@ export function EnterpriseAccountMenu({ wide, openSettings, useAccount, startSig
         ...(account == null ? [{ id: 'sign-in', label: t('signIn'), icon: <IconUserOutlineMedium size={16} />,
           disabled: busy }] : [
           { id: 'identity', label: account.email, disabled: true },
-          { id: 'sign-out', label: t('signOut'), disabled: busy },
+          { id: 'sign-out', label: t('signOut'), icon: <LogoutIcon />, disabled: busy },
         ]),
         { id: 'settings', label: t('settings'), icon: <IconSettingsOutlineMedium size={16} /> },
         ...(failed ? [{ id: 'retry', label: t('retry') }] : []),

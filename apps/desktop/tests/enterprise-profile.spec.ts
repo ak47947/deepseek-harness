@@ -1,10 +1,9 @@
-/** Profile preparation preserves personal rows and credentials while publishing complete enterprise policy before startup. */
+/** Account preparation retains personal configuration and migrates restricted enterprise profiles. */
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { z } from 'zod'
 import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { enterpriseSessionSchema } from '@deepseek-ai/dsh-enterprise/protocol'
 import {
@@ -26,12 +25,6 @@ describe('enterprise profile preparation', () => {
   it('preserves account history and unrelated settings, and removes managed credentials only after the Host stops', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-enterprise-profile-'))
     roots.push(root)
-    const runtime = join(root, 'runtime')
-    const presets = join(runtime, 'node_modules', '@deepseek-ai', 'dsh-web-app', 'presets')
-    await mkdir(presets, { recursive: true })
-    await cp(fileURLToPath(new URL('../../../packages/bundle/web-app/presets', import.meta.url)), presets, {
-      recursive: true,
-    })
     const session = enterpriseSessionSchema.parse({
       enterpriseId: 'company',
       userId: 'alice',
@@ -56,10 +49,13 @@ describe('enterprise profile preparation', () => {
     })
     await mkdir(join(paths.home, 'sessions'))
     await writeFile(join(paths.home, 'sessions', 'history.txt'), 'retained conversation')
-    await prepareEnterpriseProfile(paths, runtime, session, clientEntry)
+    await prepareEnterpriseProfile(paths, session, clientEntry, 'Atrix Harness')
     const text = await readFile(join(paths.profile, 'cordis.patch.yml'), 'utf8')
     expect(text).not.toContain('test-employee-key')
     const patches = loadOverlayPatches('dsh', join(paths.profile, 'cordis.patch.yml'))
+    expect(patches.find(row => row.id === 'system-prompt')?.config).toMatchObject({ includeHarnessIdentity: false })
+    expect(patches.flatMap(row => row.insert ?? []).find(row => row.id === 'ui-settings-enterprise-account')?.config)
+      .toEqual({ agentName: 'Atrix Harness' })
     expect(patches.flatMap(row => row.insert ?? []).find(row => row.id === 'ui-settings-enterprise-account')?.name)
       .toBe(pathToFileURL(clientEntry).href)
     expect(patches.find(row => row.id === 'locale')?.config).toEqual({ preference: 'zh' })
@@ -75,22 +71,36 @@ describe('enterprise profile preparation', () => {
       },
     })
     for (const id of [
-      'deepseek-account',
       'llm-deepseek',
-      'plugin-manager',
-      'tool-plugin-manager',
-      'product-analytics',
-      'session-telemetry-otel',
+      'ui-settings-account',
+      'ui-brand-official',
     ]) {
       expect(patches.find(row => row.id === id)?.disabled).toBe(true)
     }
-    for (const id of ['standard', 'ptc', 'cordis']) {
-      const configuration: unknown = patches.find(row => row.id === `preset-${id}`)?.config
-      const { plugins } = z.object({ plugins: z.array(z.object({ id: z.string() })) }).parse(configuration)
-      expect(plugins.some(row => ['tool-plugin-manager', 'tool-cordis', 'extensions'].includes(row.id))).toBe(false)
-      expect(plugins.some(row => row.id === 'tool-skill')).toBe(true)
+    for (const id of [
+      'deepseek-account',
+      'account-controller',
+      'plugin-manager',
+      'plugin-market',
+      'ui-plugin-manager',
+      'tool-plugin-manager',
+      'extensions',
+      'product-analytics',
+      'desktop-product-telemetry',
+      'session-telemetry-otel',
+      'anonymous-user-id',
+      'web-search-deepseek',
+      'cordis-host-runner',
+      'cordis-client-runner',
+      'ui-cordis',
+      'cordis-inspect-providers',
+    ]) {
+      expect(patches.find(row => row.id === id)).toBeUndefined()
     }
-    await prepareEnterpriseProfile(paths, runtime, session, clientEntry)
+    for (const id of ['standard', 'ptc', 'cordis']) {
+      expect(patches.find(row => row.id === `preset-${id}`)).toBeUndefined()
+    }
+    await prepareEnterpriseProfile(paths, session, clientEntry, 'Atrix Harness')
     expect(
       loadOverlayPatches('dsh', join(paths.profile, 'cordis.patch.yml')).filter(row =>
         row.insert?.some(entry => entry.id === 'ui-settings-enterprise-account'),
@@ -99,6 +109,22 @@ describe('enterprise profile preparation', () => {
     await writeEnterpriseCredentials(paths.home, {})
     expect((await readCredentialDocument(paths.home)).refs).toEqual({ PERSONAL_KEY: 'personal-test-key' })
     expect(await readFile(join(paths.home, 'sessions', 'history.txt'), 'utf8')).toBe('retained conversation')
+
+    await cp(fileURLToPath(new URL('./fixtures/enterprise-restricted.patch.yml', import.meta.url)), join(paths.profile, 'cordis.patch.yml'))
+    await prepareEnterpriseProfile(paths, session, clientEntry, 'Atrix Harness')
+    const migrated = loadOverlayPatches('dsh', join(paths.profile, 'cordis.patch.yml'))
+    expect(migrated.find(row => row.id === 'locale')?.config).toEqual({ preference: 'zh' })
+    expect(migrated.filter(row => row.disabled === true).map(row => row.id).sort()).toEqual([
+      'llm-deepseek', 'llm-deepseek-account', 'ui-brand-official', 'ui-settings-account',
+    ])
+    expect(migrated.some(row => row.id?.startsWith('preset-'))).toBe(false)
+
+    const personalPatch = '- id: product-analytics\n  disabled: true\n- id: preset-standard\n  config:\n    id: standard\n    plugins: []\n'
+    await writeFile(join(paths.profile, 'cordis.patch.yml'), await readFile(join(paths.profile, 'cordis.patch.yml'), 'utf8') + personalPatch)
+    await prepareEnterpriseProfile(paths, session, clientEntry, 'Atrix Harness')
+    const customized = loadOverlayPatches('dsh', join(paths.profile, 'cordis.patch.yml'))
+    expect(customized.find(row => row.id === 'product-analytics')?.disabled).toBe(true)
+    expect(customized.find(row => row.id === 'preset-standard')?.config).toEqual({ id: 'standard', plugins: [] })
   })
 
   it('rejects malformed existing credentials without replacing their contents', async () => {

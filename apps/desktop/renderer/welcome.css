@@ -102,6 +102,11 @@ body {
   -webkit-user-drag: none;
 }
 
+.enterprise-brand {
+  width: 40px;
+  margin-inline: auto;
+}
+
 .tagline {
   margin: 0;
   color: var(--dsw-alias-label-secondary);

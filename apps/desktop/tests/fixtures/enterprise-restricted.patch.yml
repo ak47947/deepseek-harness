@@ -1,0 +1,58 @@
+- id: locale
+  config:
+    preference: zh
+- id: deepseek-account
+  disabled: true
+- id: account-controller
+  disabled: true
+- id: ui-settings-account
+  disabled: true
+- id: llm-deepseek
+  disabled: true
+- id: llm-deepseek-account
+  disabled: true
+- id: plugin-manager
+  disabled: true
+- id: plugin-market
+  disabled: true
+- id: ui-plugin-manager
+  disabled: true
+- id: tool-plugin-manager
+  disabled: true
+- id: extensions
+  disabled: true
+- id: product-analytics
+  disabled: true
+- id: desktop-product-telemetry
+  disabled: true
+- id: session-telemetry-otel
+  disabled: true
+- id: anonymous-user-id
+  disabled: true
+- id: web-search-deepseek
+  disabled: true
+- id: ui-brand-official
+  disabled: true
+- id: cordis-host-runner
+  disabled: true
+- id: cordis-client-runner
+  disabled: true
+- id: ui-cordis
+  disabled: true
+- id: cordis-inspect-providers
+  disabled: true
+- id: preset-standard
+  config:
+    id: standard
+    plugins:
+      - id: tool-skill
+- id: preset-cordis
+  config:
+    id: cordis
+    plugins:
+      - id: tool-skill
+- id: preset-ptc
+  config:
+    id: ptc
+    plugins:
+      - id: tool-skill

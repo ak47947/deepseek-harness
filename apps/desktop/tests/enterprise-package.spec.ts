@@ -1,4 +1,4 @@
-/** Enterprise builds reject official identity, missing destinations, and invalid release metadata. */
+/** Enterprise builds retain independent identity and validate configured release destinations. */
 import { describe, expect, it } from 'vitest'
 import { resolveEnterprisePackageEnvironment } from '../scripts/enterprise-package-environment.mjs'
 import { resolveEnterpriseDesktopConfig } from '../src/enterprise-config.ts'
@@ -39,7 +39,7 @@ describe('enterprise desktop release settings', () => {
       channel: 'nightly',
       environment: 'enterprise',
     })
-    expect(result?.policy.origin).toBe('https://policy.example.test')
+    expect(result?.policy?.origin).toBe('https://policy.example.test')
     expect(resolveEnterprisePackageEnvironment({}, 'darwin', 'arm64')).toBeUndefined()
   })
 
@@ -52,8 +52,19 @@ describe('enterprise desktop release settings', () => {
     expect(resolveEnterpriseDesktopConfig(result?.config, false)?.authorizationTimeoutMs).toBe(60000)
   })
 
+  it('accepts configured HTTPS destinations on official service domains', () => {
+    const result = resolveEnterprisePackageEnvironment({
+      ...environment,
+      DSH_DESKTOP_ENTERPRISE_CONFIG: JSON.stringify({ ...metadata, origin: 'https://platform.deepseek.com' }),
+      DSH_DESKTOP_ENTERPRISE_UPDATE_URL: 'https://download.deepseek.com/releases',
+      DSH_DESKTOP_ENTERPRISE_POLICY_ORIGIN: 'https://deepseek.com',
+    }, 'darwin', 'arm64')
+    expect(result?.config.origin).toBe('https://platform.deepseek.com')
+    expect(result?.update?.publicUrl).toBe('https://download.deepseek.com/releases/mac-arm64')
+    expect(result?.policy?.origin).toBe('https://deepseek.com')
+  })
+
   it.each([
-    { DSH_DESKTOP_ENTERPRISE_UPDATE_URL: 'https://download.deepseek.com' },
     { DSH_DESKTOP_ENTERPRISE_UPDATE_URL: '' },
     { DSH_DESKTOP_ENTERPRISE_POLICY_ORIGIN: 'http://policy.example.test' },
     { DSH_DESKTOP_APP_ID: 'com.deepseek.harness' },
@@ -62,19 +73,19 @@ describe('enterprise desktop release settings', () => {
     { DSH_DESKTOP_ENTERPRISE_CONFIG: JSON.stringify({ ...metadata, authorizationTimeoutMs: 59999 }) },
     { DSH_DESKTOP_ENTERPRISE_CONFIG: JSON.stringify({ ...metadata, authorizationTimeoutMs: 1800001 }) },
     { DSH_DESKTOP_ENTERPRISE_CONFIG: JSON.stringify({ ...metadata, plugin: 'unapproved' }) },
-    { DSH_DESKTOP_UNSIGNED: '0' },
     { DSH_DESKTOP_ENTERPRISE_ICON: '/missing/company.ico' },
     { DSH_DESKTOP_UPDATE_CHANNEL: 'invalid' },
   ])('rejects incomplete or unsafe enterprise release settings: %j', (patch) => {
     expect(() => resolveEnterprisePackageEnvironment({ ...environment, ...patch }, 'darwin', 'arm64')).toThrow()
   })
 
-  it('accepts loopback development only when unpackaged and never accepts executable configuration', () => {
+  it('accepts the local service in Desktop and never accepts remote HTTP or executable configuration', () => {
     expect(resolveEnterpriseDesktopConfig({ ...metadata, origin: `${metadata.origin}/` }, false)?.origin).toBe(metadata.origin)
     expect(resolveEnterpriseDesktopConfig({ ...metadata, origin: 'http://127.0.0.1:3090' }, true)?.origin).toBe(
       'http://127.0.0.1:3090',
     )
-    expect(() => resolveEnterpriseDesktopConfig({ ...metadata, origin: 'http://127.0.0.1:3090' }, false)).toThrow()
+    expect(resolveEnterpriseDesktopConfig({ ...metadata, origin: 'http://127.0.0.1:3090' }, false)?.origin).toBe('http://127.0.0.1:3090')
+    expect(() => resolveEnterpriseDesktopConfig({ ...metadata, origin: 'http://remote.example.test' }, false)).toThrow()
     expect(() =>
       resolveEnterpriseDesktopConfig({ ...metadata, origin: 'https://enterprise.example.test/path' }, true),
     ).toThrow()

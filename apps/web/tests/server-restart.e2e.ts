@@ -23,7 +23,7 @@ class RestartableServer {
     this.output = ''
     const ready = Promise.withResolvers<string>()
     const child = spawn(process.execPath, [
-      join(REPO_ROOT, 'apps/cli/lib/bin.js'), '--profile', 'web',
+      join(REPO_ROOT, 'apps/web/tests/fixtures/desktop-renderer-host.mjs'), '--profile', 'web',
       '--patch', fileURLToPath(new URL('./pin-browse-picker.overlay.yml', import.meta.url)),
       '--patch', fileURLToPath(new URL('./fixtures/restart-startup.overlay.yml', import.meta.url)),
       '--no-open', '--port', String(port),

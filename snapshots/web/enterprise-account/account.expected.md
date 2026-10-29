@@ -3,9 +3,10 @@
   - navigation:
     - button "General"
     - button "Enterprise account"
+    - button "Models"
     - button "Built-in plugins"
     - button "Agent presets"
   - button "Open configuration file"
   - button "Close"
   - text: Example organization Alice alice@example.test Basic mode
-  - button "Sign out and switch account"
+  - button "Sign out"

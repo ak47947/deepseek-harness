@@ -44,11 +44,12 @@ import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
 import { openWelcomeWindow } from './welcome-window.ts'
-import { WELCOME_IPC, needsWelcome, type WelcomeNotice } from './welcome-api.ts'
+import { WELCOME_IPC } from './welcome-api.ts'
 import { connectDesktopWelcome, type DesktopWelcomeBackend } from './welcome-backend.ts'
 import { DesktopUpdateJournal } from './update-journal.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 import { DesktopUpdateSchedule, resolveDesktopUpdateScheduleConfig } from './update-schedule.ts'
+import { desktopUpdateSupported } from './update-capability.ts'
 import { desktopUpdateErrorSummary, presentDesktopUpdate } from './update-presentation.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { readDesktopLoginShellEnvironment, resolveDesktopLoginShellConfig } from './login-shell-environment.ts'
@@ -65,7 +66,7 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
-import { resolveEnterpriseDesktopConfig } from './enterprise-config.ts'
+import { readDesktopConfiguration } from './desktop-configuration.ts'
 import { enterpriseDesktopLocale } from './enterprise-branding.ts'
 import { DesktopEnterpriseSession } from './enterprise-session.ts'
 import {
@@ -93,12 +94,13 @@ function readEnterpriseInput(): unknown {
     return undefined
   }
 }
-const enterpriseInput = readEnterpriseInput()
-const enterpriseConfig = resolveEnterpriseDesktopConfig(enterpriseInput, !app.isPackaged)
-if (enterpriseConfig !== undefined) {
-  app.setName(enterpriseConfig.productName)
-  app.setPath('userData', join(app.getPath('appData'), enterpriseConfig.appId))
-}
+const enterpriseConfig = readDesktopConfiguration({
+  appRoot: app.getAppPath(), development: !app.isPackaged,
+  dataRoot: join(app.getPath('appData'), 'com.atrix.desktop'), packaged: app.isPackaged ? readEnterpriseInput() : undefined,
+})
+app.setName(enterpriseConfig.productName)
+app.setPath('userData', (!app.isPackaged ? process.env.DSH_DESKTOP_USER_DATA_DIR : undefined)
+  ?? join(app.getPath('appData'), enterpriseConfig.appId))
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
@@ -123,7 +125,7 @@ const rendererConsole = new RendererConsoleTail()
 app.setAppLogsPath()
 
 function currentDesktopLocale(): ReturnType<typeof resolveDesktopLocale> {
-  return enterpriseDesktopLocale(resolveDesktopLocale(windowsLanguage ?? app.getLocale()), enterpriseConfig?.productName)
+  return enterpriseDesktopLocale(resolveDesktopLocale(windowsLanguage ?? app.getLocale()), enterpriseConfig.productName)
 }
 /** Quit without the task confirmation; the caller has already decided the application must stop. */
 function quitWithoutConfirmation(): void {
@@ -134,15 +136,17 @@ const recovery = new DesktopFatalRecovery({
   messages: () => currentDesktopLocale().messages,
   show: options => dialog.showMessageBox(options),
   stop: () => { shuttingDown = true; return stopForRecovery() },
-  disablePlugins: enterpriseConfig === undefined ? async () => {
-    const manager = new DesktopProjectManager(resolveDesktopPaths(), runtimeResources())
-    const backupPath = await manager.disableAllPlugins()
-    console.info('Desktop profile recovery completed:', { profilePatchBackup: backupPath ?? null, homePatch: 'unchanged' })
-  } : undefined,
+  get disablePlugins() { return disablePluginsForRecovery },
   exit: () => { quitWithoutConfirmation() },
   restart: () => { app.relaunch(); quitWithoutConfirmation() },
   writeReport: (error, source) => persistCrashReport(error, source),
 })
+let disablePluginsForRecovery: (() => Promise<void>) | undefined
+
+async function disableProfilePlugins(manager: DesktopProjectManager): Promise<void> {
+  const backupPath = await manager.disableAllPlugins()
+  console.info('Desktop profile recovery completed:', { profilePatchBackup: backupPath ?? null, homePatch: 'unchanged' })
+}
 
 function persistCrashReport(error: unknown, source: CrashReportSource): Promise<string | undefined> {
   return writeCrashReport(app.getPath('logs'), {
@@ -227,20 +231,6 @@ function developmentHostInspectPort(enabled: boolean): number | undefined {
  */
 function chromeFallbackFill(): string {
   return nativeTheme.shouldUseDarkColors ? '#1b1b1c' : '#f9fafb'
-}
-
-/**
- * Add the effective Desktop palette to a Platform authorization URL so the
- * login page opens in the application's theme. `system` resolves through
- * `nativeTheme.shouldUseDarkColors`, which follows the theme source the
- * application preload publishes.
- * @param authorizeUrl - validated Platform authorization URL.
- * @returns the authorization URL carrying `theme=light` or `theme=dark`.
- */
-function platformLoginUrl(authorizeUrl: string): string {
-  const url = new URL(authorizeUrl)
-  url.searchParams.set('theme', nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
-  return url.href
 }
 
 function createWindow(preload: string, show = false, primary = false, browserSession?: Session): BrowserWindow {
@@ -360,13 +350,13 @@ async function main(): Promise<void> {
   app.on('window-all-closed', () => {
     if (workspaceWindowCreated && !enterpriseTransition && process.platform !== 'darwin') app.quit()
   })
-  let accountBrowser: Session | undefined
+  let accountBrowser: Session | undefined = undefined
   let welcomeWindow: BrowserWindow | undefined
   let stopEnterpriseHost = async (): Promise<void> => {}
   let updateEnterpriseModel: ((value: NonNullable<DesktopEnterpriseSession['session']>) => Promise<void>) | undefined
   let enterpriseDegraded = false
   let publishEnterpriseAccount = (): void => {}
-  const enterprise: DesktopEnterpriseSession | undefined = enterpriseConfig === undefined ? undefined : new DesktopEnterpriseSession(join(app.getPath('userData'), 'enterprise'), enterpriseConfig, {
+  const enterprise: DesktopEnterpriseSession = new DesktopEnterpriseSession(join(app.getPath('userData'), 'enterprise'), enterpriseConfig, {
     encrypt: (value) => {
       if (!safeStorage.isEncryptionAvailable()) throw new Error('Enterprise desktop: secure credential storage is unavailable')
       return safeStorage.encryptString(value)
@@ -381,7 +371,7 @@ async function main(): Promise<void> {
     invalidate: async (reason, updating, clearSaved) => {
       await stopEnterpriseHost()
       await updating?.catch(() => undefined)
-      const paths = enterprise?.paths
+      const paths = enterprise.paths
       const results = await Promise.allSettled([clearSaved, paths === undefined ? undefined : writeEnterpriseCredentials(paths.home, {}),
         accountBrowser?.clearStorageData(), accountBrowser?.clearCache()])
       const failure = results.find(result => result.status === 'rejected')
@@ -397,7 +387,7 @@ async function main(): Promise<void> {
   let restartAfterAuthorization = false
   const selectedEnterpriseWorkspace = Promise.withResolvers<undefined>()
   const enterpriseProfileCommitted = Promise.withResolvers<undefined>()
-  const enterpriseAuthorization = enterprise === undefined ? undefined : new EnterpriseBrowserSignIn(enterprise.config, async (token) => {
+  const enterpriseAuthorization = new EnterpriseBrowserSignIn(enterprise.config, async (token) => {
     const authenticated = await enterprise.acceptBrowserToken(token)
     try {
       if (choosingEnterpriseWorkspace) {
@@ -410,8 +400,8 @@ async function main(): Promise<void> {
         await enterprise.prepareAndCommit(async () => {
           await accountManager.applyRelease()
           const runtime = runtimeResources().dsh
-          await prepareEnterpriseProfile(accountPaths, runtime, authenticated,
-            resolveEnterpriseClientEntry(runtime))
+          await prepareEnterpriseProfile(accountPaths, authenticated,
+            resolveEnterpriseClientEntry(runtime), enterpriseConfig.productName)
         })
         restartAfterAuthorization = true
       }
@@ -425,9 +415,8 @@ async function main(): Promise<void> {
     }
   }, url => shell.openExternal(url))
   const openEnterpriseWelcome = async (): Promise<BrowserWindow> => {
-    if (enterpriseAuthorization === undefined) throw new Error('Enterprise desktop: browser sign-in is unavailable')
     const previousFocus = focusPrimaryWindow
-    const window = await openWelcomeWindow(enterpriseDesktopLocale(resolveDesktopLocale(app.getLocale()), enterpriseConfig?.productName), {
+    const window = await openWelcomeWindow(enterpriseDesktopLocale(resolveDesktopLocale(app.getLocale()), enterpriseConfig.productName), {
       enterprise: true, analyticsEnabled: () => Promise.resolve(false), takeNotice: () => Promise.resolve(undefined),
       startSignIn: () => enterpriseAuthorization.start(nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
       cancelSignIn: id => enterpriseAuthorization.cancel(id),
@@ -458,7 +447,7 @@ async function main(): Promise<void> {
     focusPrimaryWindow = focusWelcome
     return window
   }
-  if (enterpriseAuthorization !== undefined) {
+  {
     const off = enterpriseAuthorization.subscribe((view) => {
       if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, view)
       publishEnterpriseAccount()
@@ -469,32 +458,33 @@ async function main(): Promise<void> {
       void enterpriseAuthorization.dispose().catch((error: unknown) => { console.error(error) })
     })
   }
-  if (enterprise !== undefined && !await enterprise.restore()) {
+  if (!await enterprise.restore()) {
     welcomeWindow = await openEnterpriseWelcome()
     await selectedEnterpriseWorkspace.promise
     if (shuttingDown) return
   }
   choosingEnterpriseWorkspace = false
-  const startupEnterpriseSession = enterprise?.session
-  const startupEnterprisePaths = enterprise?.paths
-  if (enterprise !== undefined
-    && (startupEnterprisePaths === undefined || startupEnterpriseSession === undefined || !enterprise.authorized)) {
+  const startupEnterpriseSession = enterprise.session
+  const startupEnterprisePaths = enterprise.paths
+  if (startupEnterprisePaths === undefined || startupEnterpriseSession === undefined || !enterprise.authorized) {
     throw new Error('Enterprise desktop: sign in before opening a workspace')
   }
-  if (startupEnterprisePaths !== undefined) accountBrowser = session.fromPartition(`persist:dsh-enterprise-${startupEnterprisePaths.key}`)
-  const browserSession = accountBrowser ?? session.defaultSession
+  accountBrowser = session.fromPartition(`persist:dsh-enterprise-${startupEnterprisePaths.key}`)
+  const browserSession = accountBrowser
   const desktopSettings = readDesktopSettings(app.getPath('userData'))
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
   const updateJournal = journalDirectory === undefined ? undefined : new DesktopUpdateJournal(journalDirectory, app.getVersion())
   const resources = runtimeResources()
-  const paths = startupEnterprisePaths === undefined ? resolveDesktopPaths() : resolveDesktopPaths(startupEnterprisePaths.home)
+  const paths = resolveDesktopPaths(startupEnterprisePaths.home)
   const development = !app.isPackaged
+  const updatesSupported = desktopUpdateSupported(process.platform, app.isPackaged, process.resourcesPath)
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
     : join(process.resourcesPath, 'runtime', 'primary-runtime')
   const activeProject = paths.profile
   const manager = new DesktopProjectManager(paths, resources)
+  disablePluginsForRecovery = () => disableProfilePlugins(manager)
   // Dock and Finder launches inherit only launchd's environment; every Host shares one login-shell read.
   const loginShellRead = new AbortController()
   // The probe runs in its own process group, which outlives Desktop unless the read is aborted.
@@ -508,20 +498,17 @@ async function main(): Promise<void> {
   let hostEnvironment: NodeJS.ProcessEnv = process.env
   const prepareHostEnvironment = async (): Promise<void> => {
     hostEnvironment = await loginShell
-    if (enterprise !== undefined && startupEnterprisePaths !== undefined) {
-      if (!enterprise.authorized) throw new Error('Enterprise desktop: account authorization expired before Host startup')
-      hostEnvironment = { ...hostEnvironment, DSH_HOME: startupEnterprisePaths.home }
-    }
+    if (!enterprise.authorized) throw new Error('Enterprise desktop: account authorization expired before Host startup')
+    hostEnvironment = { ...hostEnvironment, DSH_HOME: startupEnterprisePaths.home }
   }
   const prepareDesktopHost = async (): Promise<void> => {
     await Promise.all([manager.applyRelease(), prepareHostEnvironment()])
-    if (enterprise === undefined) return
-    if (startupEnterprisePaths === undefined || startupEnterpriseSession === undefined || !enterprise.authorized) {
+    if (!enterprise.authorized) {
       throw new Error('Enterprise desktop: account authorization is unavailable')
     }
     const clientEntry = resolveEnterpriseClientEntry(resources.dsh)
     await enterprise.prepareAndCommit(() =>
-      prepareEnterpriseProfile(startupEnterprisePaths, resources.dsh, startupEnterpriseSession, clientEntry))
+      prepareEnterpriseProfile(startupEnterprisePaths, startupEnterpriseSession, clientEntry, enterpriseConfig.productName))
     enterpriseProfileCommitted.resolve(undefined)
   }
   let quitting = false
@@ -559,7 +546,7 @@ async function main(): Promise<void> {
   let updateStopFailure: DesktopHostUncleanExitError | undefined
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const systemLanguages = app.getPreferredSystemLanguages()
-  let locale = enterpriseDesktopLocale(resolveDesktopStartupLocale(null, systemLanguages), enterpriseConfig?.productName)
+  let locale = enterpriseDesktopLocale(resolveDesktopStartupLocale(null, systemLanguages), enterpriseConfig.productName)
   windowsLanguage = locale.id
   let mandatoryPolicy: DesktopMandatoryUpdatePolicy | undefined
   let mandatoryUI: DesktopMandatoryUpdateWindow | undefined
@@ -619,11 +606,6 @@ async function main(): Promise<void> {
       if (analyticsEnabled) await welcomeBackend?.report(event)
     } catch (_error) { /* Analytics cannot interrupt native actions. */ }
   }
-  let stopAccount: (() => void) | undefined
-  let openedAttempt: string | undefined
-  let returnedAttempt: string | undefined
-  let pendingWelcomeNotice: WelcomeNotice | undefined
-  let previousAccountStatus: string | undefined
   const assertProductSender = (event: IpcMainInvokeEvent): BrowserWindow => {
     assertDesktopSender(event, ['app'])
     if (mainWindow === undefined || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents
@@ -655,7 +637,7 @@ async function main(): Promise<void> {
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
-      enterprise === undefined ? resources : undefined, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView.setSession(next) })
     return {
       start: async () => {
         const ready = await host.start()
@@ -665,59 +647,17 @@ async function main(): Promise<void> {
         injections = ready.injections
         welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => browserSession.fetch(input, init),
           async () => (await browserSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
-        if (enterprise !== undefined) {
-          if (startupEnterpriseSession === undefined) return
-          if (!enterprise.authorized) { await host.stop(); throw new Error('Enterprise desktop: account expired during Host startup') }
-          updateEnterpriseModel = value => rotateEnterpriseModel(ready.url,
-            (input, init) => browserSession.fetch(input instanceof URL ? input.href : input, init), value, () => enterprise.authorized)
-          enterprise.startSynchronization()
-          return
-        }
+        if (!enterprise.authorized) { await host.stop(); throw new Error('Enterprise desktop: account expired during Host startup') }
+        updateEnterpriseModel = value => rotateEnterpriseModel(ready.url,
+          (input, init) => browserSession.fetch(input instanceof URL ? input.href : input, init), value, () => enterprise.authorized)
+        enterprise.startSynchronization()
         analyticsEnabled = await welcomeBackend.analyticsEnabled().catch(() => false)
         if (!reportedLaunch) { reportedLaunch = true; void track('desktop_app_launch', {}) }
-        stopAccount?.()
-        const accountBackend = welcomeBackend.account
-        stopAccount = accountBackend.watch((state) => {
-          if (quitting) return
-          if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
-          const attempt = state.attempt
-          if (attempt?.phase === 'waiting-browser' && attempt.authorizeUrl !== undefined && openedAttempt !== attempt.id) {
-            openedAttempt = attempt.id
-            void shell.openExternal(platformLoginUrl(attempt.authorizeUrl)).catch(() => undefined)
-          }
-          if ((attempt?.phase === 'failed' || attempt?.phase === 'expired') && returnedAttempt !== attempt.id) {
-            returnedAttempt = attempt.id
-            focusPrimaryWindow()
-          }
-          if (state.status === 'credential-stored' && attempt?.phase === 'succeeded' && welcomeWindow !== undefined) void enterWorkspace({ activate: false }).catch(() => undefined)
-          if (previousAccountStatus === 'credential-stored' && state.status === 'signed-out') {
-            void readWelcomeState().then(async (value) => {
-              if (needsWelcome(value) && !quitting) {
-                enteredWorkspace = false
-                await showWelcome()
-                if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
-              }
-              return undefined
-            }).catch(() => undefined)
-          }
-          previousAccountStatus = state.status
-        }, () => {
-          // The stream reconnects; a transport failure does not change account state.
-        }, () => {
-          void readWelcomeState().then(async (value) => {
-            if (!needsWelcome(value) || quitting) return
-            pendingWelcomeNotice = 'session-expired'
-            enteredWorkspace = false
-            await showWelcome()
-            const state = await accountBackend.state()
-            if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
-          }).catch(() => undefined)
-        }, (enabled) => { analyticsEnabled = enabled })
+
       },
       stop: async () => {
         updateEnterpriseModel = undefined
         analyticsEnabled = false
-        stopAccount?.()
         try { await host.stop(requireCleanStop) }
         catch (error) {
           if (!requireCleanStop || !(error instanceof DesktopHostUncleanExitError)) throw error
@@ -786,13 +726,12 @@ async function main(): Promise<void> {
 
   const readWelcomeState = async () => {
     if (backend.host === undefined || welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
-    if (enterprise !== undefined) return {
-      loggedIn: startupEnterpriseSession !== undefined,
-      hasApiKey: startupEnterpriseSession !== undefined,
+    return {
+      loggedIn: true,
+      hasApiKey: true,
       writable: false,
       localePreference: await welcomeBackend.readLocalePreference(),
     }
-    return welcomeBackend.read()
   }
   stopEnterpriseHost = async () => {
     enterpriseTransition = true
@@ -808,7 +747,7 @@ async function main(): Promise<void> {
   }
   stopForRecovery = async () => {
     enterpriseProfileCommitted.resolve(undefined)
-    await Promise.all([enterpriseAuthorization?.dispose(), enterprise?.dispose(), backend.close()])
+    await Promise.all([enterpriseAuthorization.dispose(), enterprise.dispose(), backend.close()])
   }
 
   const reconcileBackend = (): Promise<void> => {
@@ -880,12 +819,15 @@ async function main(): Promise<void> {
       }
       return true
     },
-    undefined, undefined, undefined,
+    undefined, () => updatesSupported, undefined,
     (success, reason) => { void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } }) },
     updateChannel,
   )
 
   const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))
+  // Only a package carrying a feed polls it; macOS replaces the application through MDM.
+  const checkUpdates = (manual = false, force = manual): Promise<DesktopUpdateState> =>
+    updatesSupported ? updateSchedule.check(manual, force) : Promise.resolve(updates.state)
 
   const downloadUpdate = async (version: string): Promise<DesktopUpdateState> => {
     void track('desktop_upgrade_click', {})
@@ -896,7 +838,7 @@ async function main(): Promise<void> {
     // A confirmation on a hidden window would go unseen, so it waits for the next show; the mandatory
     // flow keeps its own taskbar and Dock attention instead.
     if (!isMandatory()) await windowShown()
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- A quit can begin while the show is awaited.
+    // oxlint-disable-next-line typescript/no-unnecessary-condition -- A quit can begin while the show is awaited.
     if (quitting) return state
     return updates.install(version)
   }
@@ -1006,7 +948,7 @@ async function main(): Promise<void> {
     const window = mainWindow
     if (window === undefined || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame
       || typeof next !== 'string') return
-    const current = enterpriseDesktopLocale(resolveDesktopStartupLocale(next, systemLanguages), enterpriseConfig?.productName)
+    const current = enterpriseDesktopLocale(resolveDesktopStartupLocale(next, systemLanguages), enterpriseConfig.productName)
     if (current.id === locale.id) return
     locale = current
     platformView.notifyLocaleChanged()
@@ -1023,31 +965,29 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(ENTERPRISE_IPC.organization, (event) => {
     assertProductSender(event)
-    if (enterpriseConfig === undefined) throw new Error('Enterprise desktop: organization is unavailable')
-    return enterpriseConfig.productName
+    return enterpriseConfig.enterpriseName
   })
   ipcMain.handle(ENTERPRISE_IPC.account, (event) => {
     assertProductSender(event)
-    const account = enterprise?.session
+    const account = enterprise.session
     return account === undefined ? null : {
-      organization: enterprise?.config.productName, name: account.name, email: account.email,
+      organization: enterprise.config.enterpriseName, name: account.name, email: account.email,
       mode: account.provisioning.mode, expiresAt: account.expiresAt, degraded: enterpriseDegraded,
     }
   })
   ipcMain.handle(ENTERPRISE_IPC.signOut, async (event) => {
     assertProductSender(event)
-    if (enterprise !== undefined && await quitConfirmation.confirm()) await enterprise.signOut()
+    if (await quitConfirmation.confirm()) await enterprise.signOut()
   })
   ipcMain.handle('dsh-enterprise:start', async (event) => {
     assertProductSender(event)
-    if (enterpriseAuthorization === undefined) throw new Error('Enterprise desktop: sign-in is unavailable')
     if (welcomeWindow === undefined || welcomeWindow.isDestroyed()) welcomeWindow = await openEnterpriseWelcome()
     return enterpriseAuthorization.start(nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
   })
-  ipcMain.handle('dsh-enterprise:state', (event) => { assertProductSender(event); return enterpriseAuthorization?.view() })
+  ipcMain.handle('dsh-enterprise:state', (event) => { assertProductSender(event); return enterpriseAuthorization.view() })
   ipcMain.handle('dsh-enterprise:cancel', (event, id: unknown) => {
     assertProductSender(event)
-    if (typeof id !== 'string' || enterpriseAuthorization === undefined) throw new Error('Enterprise desktop: invalid sign-in attempt')
+    if (typeof id !== 'string') throw new Error('Enterprise desktop: invalid sign-in attempt')
     return enterpriseAuthorization.cancel(id as import('@deepseek-ai/dsh-deepseek-account/types').SignInAttemptId)
   })
   ipcMain.handle(DESKTOP_IPC.onboardingApiKey, async (event) => {
@@ -1073,6 +1013,8 @@ async function main(): Promise<void> {
   let promptOperation: Promise<void> | undefined
   let policyAuthenticationQueued = false
   const openUpdatePrompt = (manual = false): Promise<void> => {
+    // macOS and feedless builds replace the application through their installer instead.
+    if (!updatesSupported) return Promise.resolve()
     if (authenticationOperation !== undefined) {
       policyAuth?.focus(); updateDialog.focus()
     }
@@ -1083,7 +1025,7 @@ async function main(): Promise<void> {
       if (joinedPolicyAuthentication) await authenticatePolicy()
       if (isMandatory()) {
         mandatoryUI?.focus()
-        if (manual) await Promise.all([checkPolicyManually(), updateSchedule.check(true)])
+        if (manual) await Promise.all([checkPolicyManually(), checkUpdates(true)])
         return
       }
       let controller: AbortController | undefined
@@ -1099,7 +1041,7 @@ async function main(): Promise<void> {
           if (!joinedPolicyAuthentication) {
             void checkPolicyManually('deferred').catch((error: unknown) => { console.error(error) })
           }
-          state = await updateSchedule.check(true)
+          state = await checkUpdates(true)
         }
         if (isMandatory()) { mandatoryUI?.focus(); return }
         if (state.phase === 'error' && state.failedOperation === 'check') { await showUpdateFailure(state); return }
@@ -1193,7 +1135,7 @@ async function main(): Promise<void> {
 
   const automaticCheck = (): void => {
     if (!quitting) void mandatoryPolicy?.check('foreground-or-resume').catch((error: unknown) => { console.error(error) })
-    if (!quitting) void updateSchedule.check().catch((error: unknown) => { console.error(error) })
+    if (!quitting) void checkUpdates().catch((error: unknown) => { console.error(error) })
   }
   powerMonitor.on('resume', automaticCheck)
   app.on('will-quit', () => {
@@ -1202,10 +1144,10 @@ async function main(): Promise<void> {
     updates.dispose()
   })
 
-  const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
+  const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'enterprise', 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
-    applicationName: enterpriseConfig?.productName ?? 'DeepSeek Harness',
+    applicationName: enterpriseConfig.productName,
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
@@ -1232,8 +1174,9 @@ async function main(): Promise<void> {
         click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } }
       : { label: currentDesktopLocale().messages.aboutMenu, role: 'about' },
     { type: 'separator' },
-    { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
-    ...enterprise === undefined && (process.platform === 'darwin' || process.platform === 'win32')
+    ...(updatesSupported
+      ? [{ label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } }] : []),
+    ...(process.platform === 'darwin' || process.platform === 'win32')
       ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
     ...development ? [
       { type: 'separator' as const },
@@ -1261,7 +1204,7 @@ async function main(): Promise<void> {
     tray?.relabel()
   }
   refreshApplicationMenu()
-  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
+  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'enterprise', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
   if (process.platform === 'win32') {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
     try {
@@ -1345,6 +1288,10 @@ async function main(): Promise<void> {
   const createMainWindow = (): BrowserWindow => {
     const window = createWindow(appPreload, false, true, browserSession)
     mainWindow = window
+    window.on('page-title-updated', (event) => {
+      event.preventDefault()
+      window.setTitle(enterpriseConfig.productName)
+    })
     browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name))
     shortcuts.attach(window)
     window.on('focus', automaticCheck)
@@ -1412,83 +1359,24 @@ async function main(): Promise<void> {
       window.webContents.openDevTools({ mode: 'detach' })
     }
   }
-  let openingWelcome: Promise<void> | undefined
-  const showWelcome = (): Promise<void> => {
-    if (quitting) return Promise.resolve()
+  const showWelcome = async (): Promise<void> => {
+    if (quitting) return
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) {
-      if (!welcomeWindow.isVisible()) void track('auth_page_view', {})
       welcomeWindow.show()
       welcomeWindow.focus()
-      return Promise.resolve()
+      return
     }
-    openingWelcome ??= (async () => {
-      if (enterpriseAuthorization !== undefined) { welcomeWindow = await openEnterpriseWelcome(); return }
-      welcomeWindow = await openWelcomeWindow(locale, {
-        analytics: track,
-        analyticsEnabled: () => Promise.resolve(analyticsEnabled),
-        takeNotice: () => {
-          const notice = pendingWelcomeNotice
-          pendingWelcomeNotice = undefined
-          return Promise.resolve(notice)
-        },
-        startSignIn: async () => {
-          if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
-          return welcomeBackend.account.start(desktopClientMetadata(locale.id))
-        },
-        cancelSignIn: async (id) => {
-          if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
-          return welcomeBackend.account.cancel(id)
-        },
-        copySignInLink: async (id) => {
-          const state = await welcomeBackend?.account.state()
-          if (state?.attempt?.id !== id || state.attempt.phase !== 'waiting-browser' || state.attempt.authorizeUrl === undefined) {
-            throw new Error('desktop welcome: login link is unavailable')
-          }
-          await clipboard.writeText(platformLoginUrl(state.attempt.authorizeUrl))
-        },
-        saveApiKey: async (apiKey) => {
-          if (backend.host === undefined || welcomeBackend === undefined) return { ok: false }
-          const saved = await welcomeBackend.save(apiKey)
-          if (!saved.ok) return saved
-          await enterWorkspace()
-          return { ok: true }
-        },
-        skip: enterWorkspace,
-      })
-      const window = welcomeWindow
-      window.once('closed', () => {
-        void welcomeBackend?.account.state().then((state) => {
-          if (state.attempt !== null && !enteredWorkspace) return welcomeBackend?.account.cancel(state.attempt.id)
-          return undefined
-        }).catch(() => undefined)
-      })
-      window.once('closed', () => {
-        if (welcomeWindow === window) welcomeWindow = undefined
-        if (enteredWorkspace || recovery.active) return
-        // Nothing runs before the workspace opens. macOS keeps the Dock convention and drops the
-        // unused main window so the next activation rebuilds the welcome; elsewhere the close quits.
-        if (process.platform === 'darwin') mainWindow?.destroy()
-        else app.quit()
-      })
-      if (isQuitting() || recovery.active || enteredWorkspace) window.close()
-      else mainWindow?.hide()
-    })().finally(() => { openingWelcome = undefined })
-    return openingWelcome
+    welcomeWindow = await openEnterpriseWelcome()
+    mainWindow?.hide()
   }
   const openInitialWindow = async (): Promise<void> => {
     if (quitting || recovery.active) return
     const state = await readWelcomeState()
     if (isQuitting() || backend.state.phase !== 'ready') return
-    locale = enterpriseDesktopLocale(resolveDesktopStartupLocale(state.localePreference, systemLanguages), enterpriseConfig?.productName)
+    locale = enterpriseDesktopLocale(resolveDesktopStartupLocale(state.localePreference, systemLanguages), enterpriseConfig.productName)
     windowsLanguage = locale.id
     refreshApplicationMenu()
-    if (enterprise === undefined && !enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {
-      // A later login must retain its own activation policy instead of replaying startup focus.
-      raiseAfterUpdate = false
-      await showWelcome()
-    } else {
-      await enterWorkspace()
-    }
+    await enterWorkspace()
   }
   focusPrimaryWindow = () => {
     if (quitting) return
@@ -1524,7 +1412,6 @@ async function main(): Promise<void> {
     quitConfirmation.dispose()
     backgroundNotice?.dispose()
     tray?.dispose()
-    stopAccount?.()
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide()
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.hide()
     updateSchedule.dispose()
@@ -1532,7 +1419,7 @@ async function main(): Promise<void> {
     mandatoryUI?.dispose()
     void Promise.all([
       Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()),
-      backend.close(), enterpriseAuthorization?.dispose(), enterprise?.dispose(),
+      backend.close(), enterpriseAuthorization.dispose(), enterprise.dispose(),
       // A Platform cleanup failure is logged without cutting the remaining Host shutdown short.
       platformView.dispose().catch((error: unknown) => { console.error(error) }),
       disposeFileDrag().catch((error: unknown) => { console.error(error) })])
@@ -1589,7 +1476,7 @@ async function main(): Promise<void> {
         if (!wasBlocking) updateDialog.cancel()
       }
       mandatoryUI?.sync()
-      if (state.blocking && !wasBlocking) void updateSchedule.check(false, true).catch((error: unknown) => { console.error(error) })
+      if (state.blocking && !wasBlocking) void checkUpdates(false, true).catch((error: unknown) => { console.error(error) })
       wasBlocking = state.blocking
     }, policyAuth?.request, () => desktopClientMetadata(locale.id))
     const policy = mandatoryPolicy
@@ -1598,7 +1485,7 @@ async function main(): Promise<void> {
       preload: fileURLToPath(new URL('./preload-mandatory.cjs', import.meta.url)), locale,
       allowedPageOrigins: policyConfig.allowedPageOrigins, parent: () => mainWindow,
       policy: () => policy.state, update: () => updates.state,
-      refresh: async () => { await Promise.all([checkPolicyManually(), updateSchedule.check(true)]) },
+      refresh: async () => { await Promise.all([checkPolicyManually(), checkUpdates(true)]) },
       download: downloadUpdate, install: version => updates.install(version),
     })
     void mandatoryPolicy.check('launch').then((state) => {
@@ -1606,11 +1493,9 @@ async function main(): Promise<void> {
     }).catch((error: unknown) => { console.error(error) })
   }
   automaticCheck()
-  if (enterprise !== undefined) {
-    const syncEnterprise = (): void => { void enterprise.synchronize().catch((error: unknown) => { reportFatal(error, 'main') }) }
-    powerMonitor.on('resume', syncEnterprise)
-    app.on('will-quit', () => { powerMonitor.off('resume', syncEnterprise) })
-  }
+  const syncEnterprise = (): void => { void enterprise.synchronize().catch((error: unknown) => { reportFatal(error, 'main') }) }
+  powerMonitor.on('resume', syncEnterprise)
+  app.on('will-quit', () => { powerMonitor.off('resume', syncEnterprise) })
   await reconcileBackend().catch(() => undefined)
   // Window lifecycle callbacks run while backend startup is pending.
   if (isQuitting()) return

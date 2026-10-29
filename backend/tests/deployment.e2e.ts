@@ -104,10 +104,10 @@ it.skipIf(process.env.DSH_ENTERPRISE_DOCKER_E2E !== '1')(
       pull_policy: 'never',
       environment: {
         DSH_ENTERPRISE_ID: 'test-only-local',
-        DSH_ENTERPRISE_ORIGIN: 'http://127.0.0.1:3092',
+        DSH_ENTERPRISE_ORIGIN: 'http://127.0.0.1:3090',
         DSH_HOME: '/data/harness',
       },
-      ports: [{ host_ip: '127.0.0.1', published: '3092', target: 3090 }],
+      ports: [{ host_ip: '127.0.0.1', published: '3090', target: 3090 }],
     } } })
     const custom = await execa('docker', args, { env: { ...env, DSH_ENTERPRISE_LOCAL_PORT: '4092' }, timeout: 30000 })
     expect(JSON.parse(custom.stdout)).toMatchObject({ services: { backend: {

@@ -4,6 +4,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { DesktopEnterpriseAccountBridge } from '../types.ts'
 import { EnterpriseAccountSection } from './AccountSection.tsx'
 import { en, zh } from './locales.ts'
@@ -49,6 +51,8 @@ export function apply(ctx: Context): void {
     ctx.slots.register({ name: 'sidebar.brand.name', inject: () => ({ bridge }) }, EnterpriseBrand),
   )
   ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({ name: 'sidebar.brand.mark' }, EnterpriseBrandMark))
+  ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark' }, EnterpriseBrandMark))
+  ctx.slots.inject('conversation.chat.running.mark', () => ctx.slots.register({ name: 'conversation.chat.running.mark' }, EnterpriseBrandMark))
   ctx.slots.inject('settings.section', () =>
     ctx.slots.register(
       {

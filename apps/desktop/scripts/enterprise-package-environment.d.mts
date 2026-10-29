@@ -3,6 +3,7 @@ export interface EnterprisePackageConfig {
   appId: string
   productName: string
   origin: string
+  enterpriseName?: string
   syncIntervalMs?: number
   requestTimeoutMs?: number
   authorizationTimeoutMs?: number
@@ -12,8 +13,8 @@ export interface EnterprisePackageConfig {
 export interface EnterprisePackageEnvironment {
   config: EnterprisePackageConfig
   icon: string | undefined
-  policy: { origin: string; allowedPageOrigins: string[]; authentication: 'anonymous' }
-  update: { publicUrl: string; channel: 'nightly' | 'latest'; environment: 'enterprise' }
+  policy: { origin: string; allowedPageOrigins: string[]; authentication: 'anonymous' } | undefined
+  update: { publicUrl: string; channel: 'nightly' | 'latest'; environment: 'enterprise' } | undefined
 }
 
 /** @param env - File-owned release settings. @param platform - Target operating system. @param arch - Target architecture. @returns Enterprise settings, or undefined for the official distribution. */

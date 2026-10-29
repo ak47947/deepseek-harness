@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DesktopEnterpriseAccountBridge } from '../types.ts'
+import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import css from './Brand.module.css'
 
 /** @param props - Native organization metadata source. @returns Enterprise display name before and after sign-in. */
 export function EnterpriseBrand({ bridge }: InjectFace<{ bridge: DesktopEnterpriseAccountBridge }>) {
@@ -23,7 +25,7 @@ export function EnterpriseBrand({ bridge }: InjectFace<{ bridge: DesktopEnterpri
   return <span>{name}</span>
 }
 
-/** @returns An unoccupied mark; enterprises supply signed application artwork through release configuration. */
-export function EnterpriseBrandMark() {
-  return null
+/** @param props - Host-owned icon dimensions and placement. @returns The transparent enterprise ribbon mark. */
+export function EnterpriseBrandMark({ size, className }: HeroBrandMarkOwnerProps) {
+  return <svg width={size} height={size} className={[css.mark, className].filter(Boolean).join(' ')} aria-hidden="true" />
 }

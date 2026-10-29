@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import { dump, load } from 'js-yaml'
 import { z } from 'zod'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
-import { loadOptionalPatches, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
+import { loadOptionalPatches } from '@deepseek-ai/dsh-app-boot'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { parseCredentialsDocument } from '@deepseek-ai/dsh-credentials-local'
 import type { EnterpriseAccountKey, EnterpriseSession } from '@deepseek-ai/dsh-enterprise/protocol'
@@ -67,11 +67,17 @@ export function enterpriseProviders(session: EnterpriseSession) {
 }
 
 const disabled = [
-  'deepseek-account',
-  'account-controller',
   'ui-settings-account',
   'llm-deepseek',
   'llm-deepseek-account',
+  'ui-brand-official',
+]
+
+/** Complete disabled-row set written by the restricted enterprise profile. */
+const legacyDisabled = [
+  ...disabled,
+  'deepseek-account',
+  'account-controller',
   'plugin-manager',
   'plugin-market',
   'ui-plugin-manager',
@@ -82,40 +88,46 @@ const disabled = [
   'session-telemetry-otel',
   'anonymous-user-id',
   'web-search-deepseek',
-  'ui-brand-official',
   'cordis-host-runner',
   'cordis-client-runner',
   'ui-cordis',
   'cordis-inspect-providers',
 ]
-const presetSchema = z.looseObject({ id: z.string(), plugins: z.array(z.looseObject({ id: z.string().optional() })) })
+const legacyPresets = ['preset-standard', 'preset-cordis', 'preset-ptc']
 
 /**
- * Commit the complete enterprise policy and credentials before the Host can restore work.
+ * Commit enterprise account configuration and credentials before the Host can restore work.
  * Each document is atomically replaced; partial publication never authorizes Host startup. Personal rows and data survive.
  * @param paths - Account-owned home and desktop profile.
- * @param runtime - Immutable desktop runtime directory containing shipped preset definitions.
  * @param session - Complete, authenticated server response for this account.
  * @param clientEntry - Absolute enterprise account plugin entry resolved by the installed runtime.
+ * @param agentName - Enterprise product name shared by every agent.
  * @returns Completion after both documents have been read back and checked.
  */
 export async function prepareEnterpriseProfile(
   paths: EnterpriseAccountPaths,
-  runtime: string,
   session: EnterpriseSession,
   clientEntry: string,
+  agentName: string,
 ): Promise<void> {
   await mkdir(paths.profile, { recursive: true, mode: 0o700 })
   const filename = join(paths.profile, 'cordis.patch.yml')
   await withFileLock(filename, async () => {
-    const previous = loadOptionalPatches('dsh', filename) ?? []
+    let previous = loadOptionalPatches('dsh', filename) ?? []
+    if (legacyDisabled.every(id => previous.some(row => row.id === id && row.disabled === true))
+      && legacyPresets.every(id => previous.some(row => row.id === id && row.config !== undefined))) {
+      const legacyOwned = new Set([...legacyDisabled.filter(id => !disabled.includes(id)), ...legacyPresets])
+      previous = previous.filter(row => !legacyOwned.has(row.id ?? ''))
+    }
     const localConfiguration = z.record(z.string(), z.unknown()).parse(previous.find(row => row.id === 'llm-pi-ai')?.config ?? {})
     const localProviders = z.record(z.string(), z.unknown()).parse(localConfiguration.providers ?? {})
     const providers = { ...localProviders, ...enterpriseProviders(session) }
     const localDefault = z.looseObject({ provider: z.string().optional() }).parse(previous.find(row => row.id === 'agent-default-model')?.config ?? {})
     const defaultModel = localDefault.provider !== undefined && localDefault.provider !== 'enterprise'
       ? localDefault : { ...localDefault, provider: 'enterprise', model: session.provisioning.defaultModel }
+    const prompt = z.record(z.string(), z.unknown()).parse(previous.find(row => row.id === 'system-prompt')?.config ?? {})
     const owned = [
+      { id: 'system-prompt', config: { ...prompt, includeHarnessIdentity: false } },
       ...disabled.map(id => ({ id, disabled: true })),
       { id: 'ui-settings-models', disabled: false },
       { id: 'llm-pi-ai', disabled: false, config: { ...localConfiguration, providers } },
@@ -126,32 +138,16 @@ export async function prepareEnterpriseProfile(
     const patch = previous.filter(row => !ownedIds.has(row.id ?? '')).map(row => row.insert === undefined ? row : {
       ...row, insert: row.insert.map((entry) => {
         if (entry.id !== 'ui-settings-enterprise-account') return entry
-        return { ...entry, name: clientEntry, disabled: false }
+        return { ...entry, name: clientEntry, disabled: false, config: { agentName } }
       }),
     })
     const hasClientEntry = patch.some(row => row.insert?.some(entry => entry.id === 'ui-settings-enterprise-account'))
     if (!hasClientEntry) {
       patch.push({
         insert: [
-          { id: 'ui-settings-enterprise-account', name: clientEntry },
+          { id: 'ui-settings-enterprise-account', name: clientEntry, config: { agentName } },
         ],
       })
-    }
-    for (const preset of ['standard', 'cordis', 'ptc']) {
-      const id = `preset-${preset}`
-      const definition = loadOverlayPatches(
-        'dsh',
-        join(runtime, 'node_modules', '@deepseek-ai', 'dsh-web-app', 'presets', `${preset}.patch.yml`),
-      )
-      const entry = definition.flatMap(row => row.insert ?? []).find(row => row.id === id)
-      const parsed = presetSchema.safeParse(entry?.config)
-      if (!parsed.success) throw new Error('Enterprise desktop: shipped preset is unavailable')
-      const plugins = parsed.data.plugins.filter(
-        row => !['tool-plugin-manager', 'extensions', 'tool-cordis'].includes(row.id ?? ''),
-      )
-      const index = patch.findIndex(row => row.id === id)
-      if (index >= 0) patch.splice(index, 1)
-      patch.push({ id, config: { ...parsed.data, plugins } })
     }
     const text = dump([...patch, ...owned], { schema: entryListSchema, noRefs: true, lineWidth: -1 })
     const refs = { [enterpriseCredentialRef(session)]: session.provisioning.apiKey }

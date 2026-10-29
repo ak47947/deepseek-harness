@@ -35,7 +35,7 @@ async function fixture(session: EnterpriseSession, sharedRoot?: string) {
   const account = enterpriseAccountPaths(root, session)
   const manager = new DesktopProjectManager(resolveDesktopPaths(account.home), { dsh: runtime })
   await manager.applyRelease()
-  await prepareEnterpriseProfile(account, runtime, session, join(repository, 'packages/client/ui-settings-enterprise-account/lib/index.js'))
+  await prepareEnterpriseProfile(account, session, join(repository, 'packages/client/ui-settings-enterprise-account/lib/index.js'), 'Atrix Harness')
   const host = new DesktopHostProcess(process.execPath, runtime, account.profile, undefined,
     { ...process.env, DSH_HOME: account.home, DSH_TELEMETRY_MODE: 'DISABLED' })
   onTestFinished(() => host.stop())

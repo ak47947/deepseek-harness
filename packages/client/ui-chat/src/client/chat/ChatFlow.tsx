@@ -86,7 +86,7 @@ export const ChatFlow = memo(function ChatFlow({
   // Rows enter before the keyed status and echoes after it, so React never moves its DOM node.
   return [
     ...rows, ...leadingRows, ...openingRows,
-    ...running ? [<RunningStatus key="running" startTime={runningStartTime} paused={disconnected} t={t} />] : [],
+    ...running ? [<RunningStatus key="running" startTime={runningStartTime} paused={disconnected} t={t} renderSlot={renderSlot} />] : [],
     ...pendingRows,
   ]
 })

@@ -28,9 +28,13 @@ const FILE_SETTINGS = ['DSH_DESKTOP_WINDOWS_CER_FILE', 'DSH_DESKTOP_WINDOWS_SIGN
  * @returns {NodeJS.ProcessEnv} Unsigned build environment with the standard application identifier and no update policy.
  */
 export function localMacOSPackageEnvironment(environment = process.env) {
+  const file = environment.DSH_DESKTOP_CONFIG_FILE ?? join(APP_ROOT, 'config', 'desktop.json')
+  const document = JSON.parse(readFileSync(file, 'utf8'))
+  const enterprise = { appId: 'com.atrix.desktop', enterpriseName: 'Atrix Harness', productName: 'Atrix Harness', origin: 'http://127.0.0.1:3090', ...document.enterprise }
   return {
     ...Object.fromEntries(Object.entries(environment).filter(([name]) => !AMBIENT_RELEASE_SETTING.test(name))),
-    DSH_DESKTOP_APP_ID: 'com.deepseek.harness',
+    DSH_DESKTOP_APP_ID: enterprise.appId,
+    DSH_DESKTOP_ENTERPRISE_CONFIG: JSON.stringify(enterprise),
     DSH_DESKTOP_UNSIGNED: '1',
   }
 }

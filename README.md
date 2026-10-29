@@ -16,15 +16,15 @@ Review the [safety notice](SAFETY.md) before running the project.
 
 ## Run
 
-### Run from `npm`
+### Enterprise Desktop
 
-Install `Node.js`, then run:
+From the repository checkout, run:
 
 ```sh
-npx @deepseek-ai/dsh web
+pnpm run dev:desktop
 ```
 
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
+The application opens enterprise sign-in. Enterprise name and product name default to `Atrix Harness`; the service defaults to `http://127.0.0.1:3090`. Edit [desktop configuration](apps/desktop/config/desktop.json) to connect another enterprise service. Standalone Web launch is disabled.
 
 ### Run from source
 
@@ -35,10 +35,10 @@ git clone https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
-pnpm dsh web
+pnpm run start:desktop
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+`pnpm run build` prepares repository artifacts. `pnpm run start:desktop` launches enterprise Desktop using those artifacts.
 
 ## Community and support
 
@@ -54,7 +54,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
 
-`pnpm run dev:web` builds, serves, and rebuilds client bundles on source edits in one terminal, and `make help` lists the matching Make targets for Web and Desktop; the guide's application commands section owns the full table.
+`pnpm run dev:desktop` builds and launches the enterprise application. `make help` lists the desktop and build commands.
 
 For agents, follow [AGENTS.md](AGENTS.md).
 

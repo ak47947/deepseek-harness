@@ -69,7 +69,8 @@ if ($TestProgress -or $CompileProgressOnly) {
 }
 Add-Type -AssemblyName System.Drawing
 foreach ($asset in @('brand', 'brand-2x', 'brand-dark', 'brand-dark-2x', 'uninstaller-sidebar')) {
-    $image = [Drawing.Image]::FromFile((Join-Path $installerRoot "assets/$asset.png"))
+    $assetDirectory = if ($env:DSH_DESKTOP_ENTERPRISE_CONFIG) { "assets/enterprise" } else { "assets" }
+    $image = [Drawing.Image]::FromFile((Join-Path $installerRoot "$assetDirectory/$asset.png"))
     try {
         $bitmap = [Drawing.Bitmap]::new($image.Width, $image.Height, [Drawing.Imaging.PixelFormat]::Format24bppRgb)
         try {

@@ -1,6 +1,7 @@
 /** Build one release target with matching Electron and dsh architecture. */
 
 import { spawn } from 'node:child_process'
+import { readDesktopConfiguration } from '../src/desktop-configuration.ts'
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { join, resolve } from 'node:path'
@@ -351,6 +352,11 @@ async function main(): Promise<void> {
     : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
       unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
     })
+  if (environment.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined) {
+    const config = readDesktopConfiguration({ appRoot: APP_ROOT, development: true, environment })
+    environment.DSH_DESKTOP_ENTERPRISE_CONFIG = JSON.stringify(config)
+    environment.DSH_DESKTOP_APP_ID = config.appId
+  }
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   // Release settings come from the selected configuration files, so the version this run publishes is an
   // argument; the environment variable below only carries it to the child processes that build.

@@ -328,6 +328,20 @@
   inset: 0;
 }
 
+.runningBrand {
+  flex: none;
+  width: calc(14px + var(--dsh-content-font-delta, 0px));
+  height: calc(14px + var(--dsh-content-font-delta, 0px));
+}
+
+@keyframes running-brand-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .runningBrand { animation: running-brand-rotate 3s linear infinite; }
+}
+
 .runningWhaleStill {
   display: initial;
 }

@@ -37,6 +37,27 @@ import {
 } from './macos-app-update-config.mjs'
 
 /**
+ * Resolve the feed sealed into one package.
+ * Unsigned macOS releases carry no in-application updater because MDM distributes their DMG.
+ * Unsigned Windows keeps its feed: the sealed app-update.yml names no publisherName, so
+ * electron-updater skips signature verification of the downloaded installer.
+ * @param {NodeJS.ProcessEnv} env - Packaging environment.
+ * @param {NodeJS.Platform} platform - Target platform.
+ * @param {string} arch - Target architecture.
+ * @param {object | undefined} enterprise - Enterprise release settings, when configured.
+ * @param {boolean} unsigned - Whether this build omits release signing.
+ * @returns {object | undefined} Sealed update feed, or undefined when this build has none.
+ */
+export function resolveUpdateFeed(env, platform, arch, enterprise, unsigned) {
+  if (!unsigned) return enterprise === undefined ? resolveDesktopAutoUpdateConfig(env, platform, arch) : enterprise.update
+  if (platform !== 'win32') return undefined
+  if (enterprise !== undefined) return enterprise.update
+  // A local unsigned Windows build seals a feed only when its release settings name a destination.
+  const configured = (env.DOWNLOAD_TEST_ORIGIN ?? '').trim() !== '' || env.DSH_DESKTOP_AUTO_UPDATE_ENV === 'production'
+  return configured ? resolveDesktopAutoUpdateConfig(env, platform, arch) : undefined
+}
+
+/**
  * Create electron-builder configuration from one release environment.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
  * @param {NodeJS.Platform} hostPlatform - Build-host platform used when no explicit target is present.
@@ -68,7 +89,7 @@ export function createElectronBuilderConfig(
   if (skipNotarization && (unsigned || resolvedPlatform !== 'darwin')) throw new Error('Skipping notarization requires a signed macOS build')
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
-  const policy = enterprise?.policy ?? (packagesMacOS && unsigned ? undefined : resolveDesktopPolicyEnvironment(env))
+  const policy = enterprise === undefined ? (packagesMacOS && unsigned ? undefined : resolveDesktopPolicyEnvironment(env)) : enterprise.policy
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
   const macOSSigning = packagesMacOS && !unsigned ? resolveMacOSSigningEnvironment(env) : undefined
   if (packagesMacOS && !unsigned && !skipNotarization) resolveMacOSNotarizationEnvironment(env)
@@ -98,7 +119,7 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : enterprise?.update ?? resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = resolveUpdateFeed(env, resolvedPlatform, resolvedArch, enterprise, unsigned)
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
@@ -160,12 +181,12 @@ export function createElectronBuilderConfig(
     asarUnpack: unpack,
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
-      { from: enterprise?.icon ?? fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
+      { from: enterprise?.icon ?? fileURLToPath(new URL(enterprise === undefined ? '../resources/icon-windows.png' : '../resources/enterprise/icon-windows.png', import.meta.url)), to: 'icon.png' },
       // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
-      ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
+      ...(packagesWindows ? [{ from: fileURLToPath(new URL(enterprise === undefined ? '../resources/tray-windows.ico' : '../resources/enterprise/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
     ],
     mac: {
-      icon: enterprise?.icon ?? fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
+      icon: enterprise?.icon ?? fileURLToPath(new URL(enterprise === undefined ? '../resources/icon-macos.png' : '../resources/enterprise/icon.icns', import.meta.url)),
       category: 'public.app-category.developer-tools',
       // macOS matches the application locale against this bundle, not Electron Framework resources.
       extendInfo: {
@@ -246,7 +267,7 @@ export function createElectronBuilderConfig(
       )
     },
     win: {
-      icon: enterprise?.icon ?? fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)),
+      icon: enterprise?.icon ?? fileURLToPath(new URL(enterprise === undefined ? '../resources/icon-windows.png' : '../resources/enterprise/icon-windows.png', import.meta.url)),
       forceCodeSigning: !unsigned,
       signtoolOptions: {
         sign: windowsSigner,

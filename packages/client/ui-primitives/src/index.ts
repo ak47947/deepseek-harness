@@ -64,6 +64,7 @@ export {
   PermissionIconWorkspaceWriteMedium, PermissionIconWorkspaceWriteRegular,
 } from './PermissionIcon.tsx'
 export { ReferenceIconMedium, ReferenceIconRegular } from './ReferenceIcon.tsx'
+export { LogoutIcon } from './LogoutIcon.tsx'
 export type { ReferenceIconKind, ReferenceIconProps } from './ReferenceIcon.tsx'
 export { LinkIconMedium, LinkIconRegular, classifyLinkPath } from './LinkIcon.tsx'
 export type { LinkIconKind, LinkIconProps } from './LinkIcon.tsx'

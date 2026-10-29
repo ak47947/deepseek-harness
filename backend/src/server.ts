@@ -17,11 +17,11 @@ import { adminDocument, adminScript, adminStyles } from './web.ts'
 import { EnterpriseDepartments, DepartmentRequestError, departmentIdSchema, departmentInputSchema } from './departments.ts'
 import type { EnterpriseUserId, Provisioning } from './protocol.ts'
 import {
-  authorizationBrandSvg,
   authorizationDocument,
   authorizationScript,
   authorizationStyles,
 } from './authorization-web.ts'
+import { authorizationBrandPng } from './authorization-brand.ts'
 
 const employeeInput = z
   .object({
@@ -241,14 +241,14 @@ export class EnterpriseServer {
 
   private async route(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const authorizationUrl = new URL(request.url ?? '/', this.config.DSH_ENTERPRISE_ORIGIN)
-    if (request.method === 'GET' && ['/dsh/authorize', '/dsh/authorized', '/dsh/auth.js', '/dsh/auth.css', '/dsh/brand.svg'].includes(authorizationUrl.pathname)) {
+    if (request.method === 'GET' && ['/dsh/authorize', '/dsh/authorized', '/dsh/auth.js', '/dsh/auth.css', '/dsh/brand.png'].includes(authorizationUrl.pathname)) {
       const path = authorizationUrl.pathname
       const content = path === '/dsh/auth.js' ? authorizationScript : path === '/dsh/auth.css' ? authorizationStyles
-        : path === '/dsh/brand.svg' ? authorizationBrandSvg : authorizationDocument
+        : path === '/dsh/brand.png' ? authorizationBrandPng : authorizationDocument(this.config.DSH_ENTERPRISE_PRODUCT_NAME)
       response.writeHead(200, { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
         'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
         'content-type': path.endsWith('.js') ? 'text/javascript; charset=utf-8' : path.endsWith('.css') ? 'text/css; charset=utf-8'
-          : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html; charset=utf-8' })
+          : path.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8' })
       response.end(content)
       return
     }

@@ -11,12 +11,12 @@
 /deepseek-harness/run:
   en: 4e0248e4c6474fc6
   zh: eb2fb8d78c7d6bc0
-/deepseek-harness/run/run-from-npm:
-  en: e22005cd42e6cbad
-  zh: 0f536f4208df1d60
+/deepseek-harness/run/enterprise-desktop:
+  en: 8beedcb9fe742c7a
+  zh: ecf333a5c1f83a40
 /deepseek-harness/run/run-from-source:
-  en: 819e3f7c144d0d64
-  zh: de815f040975dba7
+  en: cbfbe038175af192
+  zh: 70a771f9c71e76c2
 /deepseek-harness/community-and-support:
   en: 20acf6451fdc869b
   zh: d06246dd019ecef7
@@ -24,8 +24,8 @@
   en: cabc2d3e9f8898bd
   zh: 83b6d238bae29ce3
 /deepseek-harness/development:
-  en: 803ca2b11b497bed
-  zh: 8b4071eb0e7783ef
+  en: 194a76fc52e89a46
+  zh: a44d780de34255d2
 /deepseek-harness/citation:
   en: 6704e9e5a8d49a91
   zh: 85c9cdd8d56f8e9d

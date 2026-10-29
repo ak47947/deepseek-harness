@@ -60,7 +60,8 @@ let disposeActiveHandlers: (() => void) | undefined
  */
 export async function openWelcomeWindow(locale: DesktopLocale, operations: WelcomeOperations): Promise<BrowserWindow> {
   const options = welcomeWindowOptions(process.platform, locale)
-  if (operations.enterprise === true) options.webPreferences.additionalArguments.push('--dsh-welcome-enterprise')
+  if (operations.enterprise === true) options.webPreferences.additionalArguments.push(
+    '--dsh-welcome-enterprise', `--dsh-welcome-product-name=${locale.messages.aboutProduct}`)
   const window = new BrowserWindow(options)
   disposeActiveHandlers?.()
   let active = true

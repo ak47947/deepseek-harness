@@ -46,6 +46,7 @@ description: "运行和管理单企业账号与模型下发服务，配置企业
 | 设置 | 默认值 | 用途 |
 |---|---|---|
 | `DSH_ENTERPRISE_HOST` / `DSH_ENTERPRISE_PORT` | `0.0.0.0` / `3090` | Compose 提供的容器监听地址 |
+| `DSH_ENTERPRISE_PRODUCT_NAME` | `Atrix Harness` | 浏览器登录与完成页的产品名；与 Desktop 的 `productName` 保持一致 |
 | `DSH_ENTERPRISE_MODE` | `basic` | `basic` 或 `managed`；精细化配置不完整时拒绝启动 |
 | `DSH_ENTERPRISE_SESSION_SECONDS` | `86400` | 登录硬有效期，范围为 60 至 2592000 秒 |
 | `DSH_ENTERPRISE_AUTHORIZATION_SECONDS` | `300` | 浏览器授权有效期，范围为 60 至 1800 秒 |
@@ -73,19 +74,19 @@ description: "运行和管理单企业账号与模型下发服务，配置企业
 <a id="connect-enterprise-desktop"></a>
 ## 连接企业桌面端
 
-在 macOS 开发电脑的仓库根目录操作，将现有桌面应用指向已部署的企业服务器。将示例地址替换为服务器的 `DSH_ENTERPRISE_ORIGIN`。壳层复用桌面欢迎页，并打开企业网页授权：
+开发时 Desktop 读取 `apps/desktop/config/desktop.json`。缺少企业字段时，企业名与产品名默认为 `Atrix Harness`，应用 ID 为 `com.atrix.desktop`，服务地址为 `http://127.0.0.1:3090`。连接其他部署时编辑此文件，再从仓库根目录运行：
 
 ```sh
-DSH_DESKTOP_ENTERPRISE_CONFIG='{"appId":"local.example.enterprise","productName":"Enterprise development","origin":"https://dsh.example.com"}' pnpm run dev:desktop
+pnpm run dev:desktop
 ```
 
-回环 HTTP 仅用于服务端和桌面端在同一台电脑上的开发；本机 Docker 部署使用 `http://127.0.0.1:3092`。员工电脑上的该地址指向员工自己的电脑。安装版桌面端要求 HTTPS。
+本机 Docker 部署与默认 Desktop 均使用 `http://127.0.0.1:3090`。本机服务支持回环 HTTP，远程服务必须使用 HTTPS。即使没有设置企业环境变量，Desktop 也会打开企业登录页。
 
-浏览器登录使用有时限且只能消费一次的授权码，绑定桌面端的 S256 PKCE 校验值和临时 `127.0.0.1` 回调。交换完成后，Better Auth 创建独立的桌面会话；浏览器 URL 不携带会话 token 或模型凭证。完成页通过 `dsh://open` 打开应用。已取消或过期的请求不能在本地完成登录。企业欢迎页要求登录，不提供访客或手工填写 API Key 入口。账号及配置准备完成后才启动 Host。侧边栏显示员工姓名，菜单提供邮箱、设置和退出登录。
+浏览器登录使用有时限且只能消费一次的授权码，绑定桌面端的 S256 PKCE 校验值和临时 `127.0.0.1` 回调。交换完成后，Better Auth 创建独立的桌面会话；浏览器 URL 不携带会话 token 或模型凭证。登录与完成页在中英文及明暗主题下均使用企业绶带图标和后台的 `DSH_ENTERPRISE_PRODUCT_NAME`。完成页通过 `dsh://open` 打开应用。已取消或过期的请求不能在本地完成登录。企业欢迎页要求登录，不提供访客或手工填写 API Key 入口。账号及配置准备完成后才启动 Host。侧边栏显示员工姓名，菜单提供邮箱、设置和退出登录。
 
 每组已认证的 `[enterpriseId, userId]` 对应 `<userData>/enterprise/accounts/<sha256>/`。壳层初始化该账号的 `profiles/desktop`，原子替换并校验模型配置和凭证文件，再将 `DSH_HOME` 和 profile 路径一并传给 Host。切换账号会停止 Host 并重启应用。同一账号重复登录会复用目录，保留项目、对话、附件和个人设置，不导入官方 CLI 默认的 `~/.dsh`。目录哈希用于区分账号，不能防止共用同一操作系统账号的人读取文件。
 
-从[桌面端模板](deploy/desktop.env.example)创建企业发布配置文件，将 `DSH_ENTERPRISE_PACKAGING_ENV` 指向其绝对路径。配置 `DSH_DESKTOP_ENTERPRISE_CONFIG`、与之匹配的 `DSH_DESKTOP_APP_ID`、`DSH_DESKTOP_ENTERPRISE_UPDATE_URL`、`DSH_DESKTOP_ENTERPRISE_POLICY_ORIGIN`、PNG 图标绝对路径的 `DSH_DESKTOP_ENTERPRISE_ICON`，以及既有的 [macOS 签名与公证设置](../apps/desktop/publishing/README.zh.md)。签名发布要求独立企业标识、HTTPS 地址和已提供的图标。安装版读取固化的元数据，运行时环境变量不能替换。更新根目录下按 `mac-arm64`、`mac-x64` 或 `win-x64` 存放既有格式的安装包和通道元数据。
+从[桌面端模板](deploy/desktop.env.example)创建企业发布配置文件，将 `DSH_ENTERPRISE_PACKAGING_ENV` 指向其绝对路径。配置 `DSH_DESKTOP_ENTERPRISE_CONFIG`、与之匹配的 `DSH_DESKTOP_APP_ID`、`DSH_DESKTOP_ENTERPRISE_UPDATE_URL`、`DSH_DESKTOP_ENTERPRISE_POLICY_ORIGIN`、可选的 PNG 图标绝对路径 `DSH_DESKTOP_ENTERPRISE_ICON`，以及既有的 [macOS 签名与公证设置](../apps/desktop/publishing/README.zh.md)。签名发布要求独立企业标识和 HTTPS 发布地址。默认随包提供企业图案。安装版在固化元数据上读取桌面配置文件，运行时环境变量不能替换这些设置。更新根目录下按 `mac-arm64`、`mac-x64` 或 `win-x64` 存放既有格式的安装包和通道元数据。
 
 ```sh
 DSH_ENTERPRISE_PACKAGING_ENV=/absolute/enterprise-release.env pnpm --filter @deepseek-ai/dsh-desktop run package:mac:arm64
@@ -93,14 +94,14 @@ DSH_ENTERPRISE_PACKAGING_ENV=/absolute/enterprise-release.env pnpm --filter @dee
 
 成员可在“设置 → 模型”中添加本地自定义供应商、API 地址、凭证和模型 ID，与企业下发模型同时使用。本地供应商、凭证及本地默认模型在服务端同步、退出登录及同一账号重新登录后保留。企业模型条目由后台刷新；个人供应商请使用不同的标识。本地供应商请求直达相应服务，不计入企业 LiteLLM 额度与用量。
 
-企业 profile 禁用官方账号和钱包界面、遥测、插件安装服务和工具、运行时自修改，以及未经批准的默认搜索。壳层不提供包管理器或桌面 CLI 安装操作，也不提供会清空配置的第三方插件恢复操作。既有 Office 技能和本地执行沿用官方沙箱与审批语义；企业专属 SOP 内容需要在打包前审核。
+企业登录保留遥测、插件市场及管理界面、预设中的插件管理工具、运行时自修改和搜索，并沿用标准配置及凭证要求。壳层提供包管理器、桌面 CLI 安装及当前账号的第三方插件恢复入口。恢复操作备份 profile 补丁，下次启动会在启动 Host 前准备企业配置。官方账号和钱包界面由企业账号界面替代。既有 Office 技能和本地执行沿用官方沙箱与审批语义。企业登录不增加 SOP、模板或外部集成审核要求；受支持的插件与 MCP 连接保持可用。发布地址接受任意显式配置的 HTTPS 主机。
 
 -----
 
 <a id="run-locally-with-docker"></a>
 ## 在本机使用 Docker
 
-[本机叠加配置](deploy/compose.local.yml)通过 `http://127.0.0.1:3092` 提供账号服务和 `/admin`，通过 `http://127.0.0.1:3091/api/v0/check_client_update` 提供更新策略。PostgreSQL 和运行时数据使用 `dsh-enterprise-local` 项目的命名卷。无需域名。
+[本机叠加配置](deploy/compose.local.yml)通过 `http://127.0.0.1:3090` 提供账号服务和 `/admin`，通过 `http://127.0.0.1:3091/api/v0/check_client_update` 提供更新策略。PostgreSQL 和运行时数据使用 `dsh-enterprise-local` 项目的命名卷。无需域名。
 
 从仓库根目录操作，按[环境变量模板](deploy/.env.example)创建私有的 `.artifacts/enterprise-local/.env`，限制为仅所有者可读，并填写[运行服务](#run-the-service)中的必填配置。叠加配置提供回环地址和容器运行目录。显式选择私有文件：
 
@@ -109,7 +110,7 @@ export DSH_ENTERPRISE_ENV_FILE="$PWD/.artifacts/enterprise-local/.env"
 docker compose --project-name dsh-enterprise-local --env-file "$DSH_ENTERPRISE_ENV_FILE" -f backend/deploy/compose.yml -f backend/deploy/compose.local.yml up --build --detach --wait
 ```
 
-打开 `/admin`，使用配置的管理员登录。在[桌面开发命令](#connect-enterprise-desktop)中使用 `http://127.0.0.1:3092` 即可连接开发版桌面端。在私有环境文件设置 `DSH_ENTERPRISE_LOCAL_PORT` 可修改账号服务端口。镜像构建后，使用相同 Compose 参数和 `up --detach --no-build --wait` 启动已有服务，或使用 `stop` 停止并保留数据。删除数据卷会删除此部署的数据。提供签名安装包和通道元数据前，更新入口仅提供策略。
+打开 `/admin`，使用配置的管理员登录。在[桌面开发命令](#connect-enterprise-desktop)中使用 `http://127.0.0.1:3090` 即可连接开发版桌面端。在私有环境文件设置 `DSH_ENTERPRISE_LOCAL_PORT` 可修改账号服务端口。镜像构建后，使用相同 Compose 参数和 `up --detach --no-build --wait` 启动已有服务，或使用 `stop` 停止并保留数据。删除数据卷会删除此部署的数据。提供签名安装包和通道元数据前，更新入口仅提供策略。
 
 -----
 
@@ -156,7 +157,7 @@ docker compose --env-file deploy/.env -f deploy/compose.yml -f deploy/compose.ma
 
 运行中轮换先写入由地址和 Key 派生的新凭证引用，再通过 Host RPC 仅更新企业供应商条目。默认模型的供应商为 enterprise 时跟随后台更新，个人默认模型保持不变。精细化模式的平台默认配置变更后，旧的继承权限会拒绝调用，直到配置同步完成员工网关密钥的更新；下发失败时账号保持不可用，并在下次同步时重试。旧引用保留到 Host 退出，使已准备的请求能够完成。部分成功或结果不确定的写入会停止 Host。停止或凭证清理失败时阻止切换账号，历史数据保留。员工停用后，不保证已经发出的上游请求立即终止。
 
-本地执行可能将文件内容、截图和工具结果发送给选定的模型供应商；精细化模式还会经过后台和 LiteLLM。试点需要明确获准发送的数据类别和网络出口策略。后台不重复计量，不在用量响应中暴露提示词日志，不提供钱包、支付、SSO、部门分摊或多租户管理。
+本地执行可能将文件内容、截图和工具结果发送给选定的模型供应商；精细化模式还会经过后台和 LiteLLM。后台不重复计量，不在用量响应中暴露提示词日志，不提供钱包、支付、SSO、部门分摊或多租户管理。
 
 -----
 

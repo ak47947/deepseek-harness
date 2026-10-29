@@ -30,7 +30,7 @@ it.each([
       '',
     ].join('\n'))
     const launch = resolveExampleLaunch({
-      srcBin: fileURLToPath(new URL('../src/bin.ts', import.meta.url)),
+      srcBin: fileURLToPath(new URL('../../web/tests/fixtures/desktop-renderer-host.mjs', import.meta.url)),
       tsconfigPath: fileURLToPath(new URL('../../../tsconfig.json', import.meta.url)),
       configArgs: ['--profile', 'web', '--patch', patch, '--no-open', '--port', '0'],
       env: {

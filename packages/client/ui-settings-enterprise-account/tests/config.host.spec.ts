@@ -5,5 +5,5 @@ import * as host from '../src/index.ts'
 it('exports the function-plugin namespace without a default export', () => {
   expect('default' in host).toBe(false)
   expect(host.name).toBe('ui-settings-enterprise-account')
-  host.apply()
+  expect(host.apply).toBeTypeOf('function')
 })

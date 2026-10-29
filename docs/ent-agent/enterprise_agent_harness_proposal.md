@@ -39,9 +39,9 @@ Deliver the basic path first: deploy the server, create employees and model assi
 | Local data | Give each company/employee account its own `DSH_HOME`; preserve projects and history across switching and reject cross-account reads |
 | Model configuration | Supply a small approved model catalog, explicit capabilities, and a default model; employees do not enter provider credentials |
 | Optional managed accounting | LiteLLM enforces employee model access and monthly budgets and meters usage; the backend configures and displays results |
-| Company SOPs | Ship approved skills and Office templates as fixed versions in the installer |
+| Company SOPs | Existing skills and Office templates ship with the installer and remain extensible through skills and plugins |
 
-The initial scope excludes public registration, independent SSO, multiple tenants, wallets, payments, plans, complex departmental accounting, centralized conversation synchronization, automatic cloud-drive indexing, and a generic MCP gateway.
+The initial scope excludes public registration, independent SSO, multiple tenants, wallets, payments, plans, complex departmental accounting, centralized conversation synchronization, and a generic MCP gateway.
 
 -----
 
@@ -99,7 +99,7 @@ The public server origin must be reachable from employee computers. Their `127.0
 <a id="enterprise-sign-in-and-desktop-integration"></a>
 ## 4. Enterprise sign-in and Desktop integration
 
-Employees use company accounts without official DeepSeek accounts, payments, or manually entered model keys. Welcome opens the server sign-in page in the system browser; server-side Better Auth verifies passwords. Enterprise Desktop offers no skip-login or manual provider-key entry. It starts the workspace Host only after authentication and account configuration preparation succeed.
+Employees use company accounts without official DeepSeek accounts, payments, or manually entered model keys. Welcome opens the server sign-in page in the system browser; server-side Better Auth verifies passwords. Welcome requires sign-in, and the workspace Host starts only after authentication and account configuration preparation succeed. After sign-in, employees can configure personal providers in Settings alongside the enterprise route.
 
 ### Sign-in and configuration synchronization
 
@@ -117,7 +117,7 @@ Only server-authenticated company and stable employee IDs select account directo
 
 Each account owns its profile, conversations, attachments, project index, credentials, personal settings, and extracted runtime dependencies. Switching first completes existing task confirmation, stops the old Host, terminals, and background work, awaits exit, closes storage, and clears renderer caches and embedded browser partitions. Only then initialize and start the new account Host. Old results must not reach the new account. Machine-level windows, shortcuts, crash logs, and encrypted login metadata remain in Electron `userData`.
 
-Sign-out, switching, restart, and upgrades must preserve history. Returning accounts reuse their directories, retaining projects, complete conversations, attachments, personal settings, and conversation continuation. Enterprise Desktop does not import default `~/.dsh` automatically; migration requires an explicit target account. Crash recovery omits the third-party-plugin reset that removes enterprise patches or bundle selections.
+Sign-out, switching, restart, and upgrades must preserve history. Returning accounts reuse their directories, retaining projects, complete conversations, attachments, personal settings, and conversation continuation. Enterprise Desktop does not import default `~/.dsh` automatically; migration requires an explicit target account. Third-party-plugin recovery backs up and resets the current account's profile; the next startup prepares its enterprise account configuration before starting the Host.
 
 Directory separation covers application-managed data without relocating project source files or adding operating-system permissions or encryption. People sharing an operating-system user can still read other account directories through the filesystem. Use separate operating-system accounts when employees need filesystem access isolation.
 
@@ -153,10 +153,10 @@ Failures distinguish budget/rate limits, forbidden models, expired sessions or c
 
 Local files, Office, browser, and command tools retain official runtime, sandbox, and approval behavior; do not add separate Ask / Plan / Craft execution modes. [Plan mode](../../packages/plan/plan-mode/README.md) does not disable tools and cannot guarantee that execution waits for approval. Verify workspace writes, out-of-scope access, approvals, and tool availability on the target operating system.
 
-- Disable product analytics, feedback telemetry, and anonymous identity reporting, or explicitly configure company-internal collectors.
-- Disable the plugin market, management service and UI, plugin-management tools in every preset, and runtime self-modification. The shell supplies neither a package manager nor Desktop CLI installation or recovery actions that remove company policy.
-- Configure default search only with company approval; fetching and browser operations follow company network policy, and update checks, policies, and installers use company destinations.
-- The company approves data categories sent to models and reviews bundled SOPs and templates. Do not automatically connect external cloud drives or business systems.
+- Product analytics, feedback telemetry, and anonymous identity reporting retain standard configuration and collection destinations.
+- The plugin market, management service and UI, plugin-management tools in every preset, and runtime self-modification remain available. The shell supplies its bundled package manager, Desktop CLI installation, and third-party-plugin recovery.
+- Search, fetching, and browser operations retain their existing configuration and credential requirements. Update checks, policies, and installers use explicitly configured HTTPS destinations without an enterprise-domain restriction.
+- Enterprise sign-in adds no data-category or SOP/template approval requirement. External cloud drives and business systems remain accessible through supported plugins and MCP connections configured by the user.
 
 -----
 
@@ -190,9 +190,9 @@ Run one backend container. Back up databases, unchanged encryption secrets, upda
 - Basic streaming and tool calls go directly to providers; the backend has no model traffic, employee metering, budgets, or model rate limiting, and the UI shows no enterprise usage.
 - Startup, resume, and periodic synchronization handle deactivation, `401`, `403`, temporary disconnection, timeouts, and `5xx`. Hard expiry stops tasks and clears credentials; transient failures retain valid caches with visible degradation. Rotation preserves prepared calls, while failed updates stop execution.
 - After A creates projects, complete conversations, and attachments and signs out, B cannot read A through lists, search, known Session IDs, or attachment references, including after restart. After B creates data, returning to A and restarting preserves A history, settings, and conversation continuation. Also verify equal user IDs across companies, name/email changes, recreated accounts, and separation from default `~/.dsh`.
-- Missing authentication, invalid identity, partial settings/credential writes, failed task shutdown, and failed Host restart prevent entering a new workspace. Old task output cannot reach a new account, and crash recovery cannot remove company configuration.
+- Missing authentication, invalid identity, partial settings/credential writes, failed task shutdown, and failed Host restart prevent entering a new workspace. Old task output cannot reach a new account, and crash recovery targets only the current account's profile and restores enterprise configuration before Host startup.
 - Independently verify provider-key revocation in basic mode. Managed qualification covers forbidden models, cross-device spend, unchanged budgets after login, exhausted budgets, stream interruption, retries, concurrency, cleanup failures, and recovery, without direct-call fallback, false success, or zero-cost displays on failure.
-- Complete Word, Excel, PowerPoint, and browser tasks on the target platform and verify workspace/approval behavior. Check telemetry, plugin installation, self-modification, and update destinations. Pilot infrastructure must provide signing, notarization, company-update upgrade, and backup-restoration evidence.
+- Complete Word, Excel, PowerPoint, and browser tasks on the target platform and verify workspace/approval behavior. Verify telemetry configuration, plugin installation, self-modification, search, Desktop CLI installation, recovery, and configured update destinations. Pilot infrastructure must provide signing, notarization, update-upgrade, and backup-restoration evidence.
 
 -----
 

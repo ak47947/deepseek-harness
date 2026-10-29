@@ -1,7 +1,7 @@
 /** macOS development bundle that loads the current workspace through Electron. */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 /** Workspace and runtime settings captured for Launch Services cold starts. */
@@ -16,8 +16,9 @@ export interface DevelopmentAppOptions {
   readonly hostPort: number
   readonly openDevtools: string
   readonly primaryRuntime: string
-  /** Public enterprise connection settings; absent for the official application. */
+  /** Enterprise identity used for the native application name. */
   readonly enterpriseConfig: string | undefined
+  readonly configurationFile?: string | undefined
 }
 
 function quote(value: string): string { return `'${value.replaceAll("'", "'\\''")}'` }
@@ -29,25 +30,29 @@ function quote(value: string): string { return `'${value.replaceAll("'", "'\\''"
  */
 export function prepareDevelopmentApp(options: DevelopmentAppOptions): string {
   const source = dirname(dirname(dirname(options.electron)))
-  const bundle = join(options.directory, 'Harness Dev.app')
-  const executable = join(bundle, 'Contents', 'MacOS', 'HarnessDev')
+  const bundle = join(options.directory, 'atrix Dev.app')
+  const executable = join(bundle, 'Contents', 'MacOS', 'AtrixDev')
   const stamp = join(bundle, 'Contents', 'Resources', 'dsh-development.json')
   const launcher = developmentLauncher(options, bundle)
-  const identity = JSON.stringify({ ...options, launcher, plist: readFileSync(join(source, 'Contents', 'Info.plist'), 'utf8') })
+  const enterprise = JSON.parse(options.enterpriseConfig ?? '{}') as { productName?: string; appId?: string }
+  const icon = join(options.appRoot, 'resources', 'enterprise', 'icon.icns')
+  const identity = JSON.stringify({ ...options, launcher, icon: readFileSync(icon).toString('base64'), plist: readFileSync(join(source, 'Contents', 'Info.plist'), 'utf8') })
   if (!existsSync(stamp) || readFileSync(stamp, 'utf8') !== identity) {
     rmSync(bundle, { recursive: true, force: true })
     execFileSync('/usr/bin/ditto', [source, bundle])
     const plist = join(bundle, 'Contents', 'Info.plist')
     const values = {
-      CFBundleIdentifier: `com.deepseek.harness.dev.${createHash('sha256').update(options.appRoot).digest('hex').slice(0, 12)}`,
-      CFBundleName: 'Harness Dev',
-      CFBundleDisplayName: 'Harness Dev',
-      CFBundleExecutable: 'HarnessDev',
-      CFBundleURLTypes: [{ CFBundleURLName: 'DeepSeek Harness', CFBundleURLSchemes: ['dsh'], CFBundleTypeRole: 'Viewer' }],
+      CFBundleIdentifier: `${enterprise.appId ?? 'com.atrix.desktop'}.dev.${createHash('sha256').update(options.appRoot).digest('hex').slice(0, 12)}`,
+      CFBundleName: enterprise.productName ?? 'Atrix Harness',
+      CFBundleDisplayName: enterprise.productName ?? 'Atrix Harness',
+      CFBundleExecutable: 'AtrixDev',
+      CFBundleIconFile: 'atrix.icns',
+      CFBundleURLTypes: [{ CFBundleURLName: enterprise.productName ?? 'Atrix Harness', CFBundleURLSchemes: ['dsh'], CFBundleTypeRole: 'Viewer' }],
     }
     for (const [key, value] of Object.entries(values)) {
       execFileSync('/usr/bin/plutil', ['-replace', key, '-json', JSON.stringify(value), plist])
     }
+    copyFileSync(icon, join(bundle, 'Contents', 'Resources', 'atrix.icns'))
     writeFileSync(executable, launcher, { mode: 0o755 })
     writeFileSync(stamp, identity, { mode: 0o600 })
     execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', bundle], { stdio: 'pipe' })
@@ -65,11 +70,12 @@ export function prepareDevelopmentApp(options: DevelopmentAppOptions): string {
 export function developmentLauncher(options: DevelopmentAppOptions, bundle: string): string {
   const environment = {
     DSH_HOME: options.home,
+    DSH_DESKTOP_USER_DATA_DIR: options.userData,
     DSH_DESKTOP_DEV_APP: '1',
     DSH_DESKTOP_HOST_INSPECT_PORT: String(options.hostPort),
     DSH_DESKTOP_OPEN_DEVTOOLS: options.openDevtools,
     DSH_DESKTOP_PRIMARY_RUNTIME_DIR: options.primaryRuntime,
-    ...(options.enterpriseConfig === undefined ? {} : { DSH_DESKTOP_ENTERPRISE_CONFIG: options.enterpriseConfig }),
+    ...(options.configurationFile === undefined ? {} : { DSH_DESKTOP_CONFIG_FILE: options.configurationFile }),
     ELECTRON_ENABLE_LOGGING: '1',
   }
   const args = [

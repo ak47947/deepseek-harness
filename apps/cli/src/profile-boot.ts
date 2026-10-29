@@ -229,6 +229,9 @@ async function composeProfile(
 ): Promise<ComposedProfile> {
   const profile = resolvedProfile?.profile ?? prepareProfile(name, true, fromDefaultProfile)
   if (resolvedProfile !== undefined) writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
+  if (resolvedProfile === undefined && profile.layers.some(layer => layer.packageName === '@deepseek-ai/dsh-web-app')) {
+    throw new Error('dsh: standalone Web startup is disabled; start enterprise Desktop instead')
+  }
   const resolutionOptions = { installAnchor: resolvedProfile?.installAnchor ?? INSTALL_ANCHOR, profile }
   const resolution = await createRuntimeResolution(resolutionOptions)
   const overlays = patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))

@@ -25,7 +25,7 @@ Show the current employee and organization in enterprise Desktop, and sign out t
 <a id="use-this-package"></a>
 ## Use this package
 
-The enterprise shell inserts this plugin into each authenticated account's desktop profile. The configured organization name and employee identity appear in that workspace. Its preload must expose `dshDesktop.enterpriseAccount`; mounting the plugin in an ordinary browser fails explicitly. No plugin configuration is required.
+The enterprise shell inserts this plugin into each authenticated account's desktop profile. The configured organization name and employee identity appear in that workspace. Its preload must expose `dshDesktop.enterpriseAccount`; mounting the plugin in an ordinary browser fails explicitly. `agentName` is required and supplied from the desktop product name, defaulting to `Atrix Harness`. The shell disables the built-in harness identity; this plugin registers the shared enterprise identity for all agent presets and subagents.
 
 The account Settings section shows the employee name, email, operating mode, and synchronization state. Sign-out asks the native shell to inspect tasks, stops the Host, removes local credentials, clears renderer storage, and restarts at sign-in. Cancelling the task confirmation preserves the account. Read and sign-out failures remain visible with retry guidance. The sidebar displays the configured organization name without the official vendor mark.
 
@@ -37,7 +37,7 @@ The account Settings section shows the employee name, email, operating mode, and
 <details>
 <summary>Implementation details</summary>
 
-The browser half registers feature-owned Settings, sidebar account, and brand slots. The account launcher shares the official account menu’s `AccountLauncher` primitive. The shell bridge exposes metadata, browser sign-in, and sign-out operations, never passwords, tokens, or model credentials. The client registration owns one account source for the sidebar and Settings, subscribes once, and ignores obsolete or disposed reads. Components consume framework hooks; plugin disposal removes the shell subscription, slots, and dictionaries.
+The browser half registers feature-owned Settings, sidebar account, sidebar brand, conversation hero mark, and running mark slots. The enterprise mark uses a transparent package asset; forced colors display its alpha silhouette. The account launcher shares the official account menu’s `AccountLauncher` primitive. The shell bridge exposes metadata, browser sign-in, and sign-out operations, never passwords, tokens, or model credentials. The client registration owns one account source for the sidebar and Settings, subscribes once, and ignores obsolete or disposed reads. Components consume framework hooks; plugin disposal removes the shell subscription, slots, and dictionaries.
 
 </details>
 
@@ -62,16 +62,24 @@ None.
 <a id="model-experience"></a>
 ## Model Experience
 
-None, as the browser displays native account metadata and invokes shell account operations without contributing model context or tools.
+### Enterprise agent identity
+
+#### What the model sees
+
+The system prompt begins with `You are Atrix Harness, the enterprise AI assistant. Your name is Atrix Harness.` when the desktop product name uses its default. The configured name is literal text, independent of the selected model and agent preset. The browser contributes no tools or account credentials.
+
+#### Token effect
+
+Each request includes one short identity section. Its token cost is fixed while the configured name stays unchanged.
 
 #### KV Cache effect
 
-The plugin does not change model requests or cache prefixes.
+The configured agent name occupies the stable system-prompt prefix. Changing it changes that prefix for subsequent requests.
 
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
 
 - The plugin requires the enterprise Electron preload.
-- Organization artwork comes from release configuration; this plugin does not create a logo.
+- Enterprise artwork is generated from the desktop enterprise master; replacing it requires rebuilding client artifacts.
 - Account switching restarts the application after the Host has stopped.

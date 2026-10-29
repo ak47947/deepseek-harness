@@ -5,6 +5,7 @@ import { endpointSchema } from './protocol.ts'
 const environmentSchema = z
   .object({
     DSH_ENTERPRISE_ID: z.string().min(1).max(256),
+    DSH_ENTERPRISE_PRODUCT_NAME: z.string().trim().min(1).max(100).default('Atrix Harness'),
     DSH_ENTERPRISE_ORIGIN: endpointSchema
       .refine(value => new URL(value).pathname === '/', 'Configure a service origin without a path')
       .transform(value => new URL(value).origin),

@@ -97,7 +97,7 @@ pnpm run build:web
 
 | 场景 | 命令 |
 |---|---|
-| 迭代包源码并需要可运行的产物 | `pnpm run build:artifacts`；`dev:web` 与 `dev:desktop` 启动前会先执行它 |
+| 迭代包源码并需要可运行的产物 | `pnpm run build:artifacts`；`dev:desktop` 启动前会先执行它 |
 | 检查测试、脚本、benchmarks 或 website 代码的类型 | 在最近一次 `build:artifacts` 之后运行 `pnpm run build:check`；包源码有改动时先重新运行 `build:artifacts` |
 | 声明 TypeScript 工作完成之前 | 在最近一次 `build:artifacts` 之后运行 `pnpm run build:check`，或运行 `pnpm run build` |
 | 完整验证（与 CI 必需的构建 lane 相同） | `pnpm run build` |
@@ -110,7 +110,7 @@ PR 产物 builder 运行 `build:artifacts`；必需的 Linux 与 Windows 普通�
 
 Typert 通过 `tsconfig.host.json` 分析 Host 类型，在包编译之前生成 Host 反射和 Host-for-Client Remote 声明。仅源码的 [`generate-typert.ts`](../scripts/generate-typert.ts) 阶段拒绝依赖构建产物的工作区导入，包括经由依赖回到生成声明的元数据依赖。Host tsdown 转换源码装饰器，但不重复生成元数据；Client tsdown 同样使用已有元数据。`pnpm run typecheck` 生成元数据，按 reference 顺序编译 Host 与 Client 包，并在每个 aggregate 的包编译完成后以 `tsc -b` 检查它。该命令跳过 native addon、bundle、Web 和 client build record。`lint`、`lint:fix` 与 `doc-typecheck` 通过 `compile-referenced-projects.ts host-contracts` 准备元数据与 Host 包声明；生成失败时不启动依赖它的编译。这些仅生成声明的命令不更新运行时 bundle；启动或测试构建产物之前应运行 `build:artifacts`。
 
-`pnpm run build` 与 `build:artifacts` 会内联根包版本、七位源码 commit，并在 Git 报告本地变化时内联 dirty 标记；调用方提供的其他 `DSH_CLIENT_*` 值也会被继承。`pnpm run build:official` 是与 CI 和 release 产物构建等价的跨平台本地命令，并省略本地 dirty 标记。每次 `build` 或 `build:artifacts` 成功后都会写入一份被 gitignore 的记录，把精确公开值与 Vite 输出及动态 client bundle 绑定；release 打包和 built Web 测试会拒绝缺少记录或被后续局部构建改动的产物。`pnpm run dev:web` 会先执行 `build:artifacts`（`--skip-build` 则复用现有产物树），再读取一次当前版本和 Git 状态，并在本次会话的所有 watcher stage 之间共享该环境；它不会校验完整构建记录，因为 watcher stage 会重写记录覆盖的产物。
+`pnpm run build` 与 `build:artifacts` 会内联根包版本、七位源码 commit，并在 Git 报告本地变化时内联 dirty 标记；调用方提供的其他 `DSH_CLIENT_*` 值也会被继承。`pnpm run build:official` 是与 CI 和 release 产物构建等价的跨平台本地命令，并省略本地 dirty 标记。每次 `build` 或 `build:artifacts` 成功后都会写入一份被 gitignore 的记录，把精确公开值与 Vite 输出及动态 client bundle 绑定；release 打包和 built Web 测试会拒绝缺少记录或被后续局部构建改动的产物。企业 Desktop 在原生窗口内加载构建后的客户端产物。
 
 `pnpm run build --profile local` 显式选择本地客户端品牌，保留仓库版本、commit 与 dirty 元数据，并丢弃继承的客户端标题及其他公开覆盖值。`build:official` 保留其精确的官方值。[Desktop 打包](../apps/desktop/packaging/README.zh.md#configuration-and-local-builds) 按签名模式选择 profile。
 
@@ -190,16 +190,14 @@ pnpm run demo:ptc -- "summarize this workspace"
 
 ### 应用命令
 
-Web 与 Desktop 共用同一对命令。`start:*` 启动上一次 `pnpm run build` 或 `build:artifacts` 的产物；`dev:*` 先执行 `build:artifacts` 再启动。Web 还会在源码修改时持续重建 client bundle，因为它的 Host 从源码运行，而浏览器加载的是构建产物：
+企业 Desktop 是图形应用入口。它读取 `apps/desktop/config/desktop.json`；省略企业字段时保留 Atrix Harness 默认值和本机服务端口 3090。`start:desktop` 使用已有产物，`dev:desktop` 先构建：
 
 ```sh
-pnpm run start:web       # serve built Web artifacts through the source launcher (the same launch as pnpm dsh web)
-pnpm run dev:web         # build, serve, and rebuild Web client bundles on source edits
-pnpm run start:desktop   # launch built Desktop artifacts
-pnpm run dev:desktop     # build, then launch Desktop
+pnpm run start:desktop   # launch built enterprise Desktop artifacts
+pnpm run dev:desktop     # build, then launch enterprise Desktop
 ```
 
-Web 命令后面的参数会传给 `dsh web`，例如 `pnpm run dev:web --no-open --port 3081`；`dev:web` 还接受 `--skip-build` 复用现有产物树，以及 `--no-serve` 只运行重建 watcher、配合别处启动的服务器。两个 Web 命令使用正常的 Harness home，而 Desktop 命令使用 [Desktop README](../apps/desktop/README.zh.md) 描述的隔离开发 home。根目录 `Makefile` 以 `make web`、`make dev-web`、`make desktop`、`make dev-desktop` 和 `make build` 命名同一套命令；`ARGS='--no-open'` 用于转发参数。
+`make desktop`、`make dev-desktop` 和 `make build` 提供相同命令。独立 Web 启动命令停用；Desktop 保留内部浏览器渲染器与 Host 传输。配置和原生开发设置见 [Desktop README](../apps/desktop/README.zh.md)。
 
 ### TODO 标记
 

@@ -1,0 +1,50 @@
+- heading "Plugins" [level=1]
+- text: Install, enable, and configure plugins
+- button "About plugins"
+- button "Refresh"
+- group "Add plugin":
+  - button "Add plugin"
+  - button "Choose how to add a plugin"
+- heading "Built-in plugin settings" [level=3]
+- list:
+  - listitem:
+    - button "View Subagent": Subagent
+    - text: Set Subagent recursion depth, count, and models.
+  - listitem:
+    - button "View Web search": Web search
+    - text: Set up the DeepSeek search provider.
+  - listitem:
+    - button "View Agent loop": Agent loop
+    - text: Control how the Agent dispatches tool calls.
+  - listitem:
+    - button "View Shell": Shell
+    - text: Limit how long each command may run and how much it may output.
+- heading "Experimental plugins" [level=3]
+- button "More"
+- list:
+  - listitem:
+    - button "View Agent teams": Agent teams
+    - text: Experimental Enable team collaboration, team tools, the member roster, and the shared task board.
+    - status
+    - switch "Enable Agent teams"
+  - listitem:
+    - button "View Voice input": Voice input
+    - text: Experimental Transcribe recordings locally with SenseVoice; first use requires installing dependencies.
+    - status
+    - switch "Enable Voice input"
+  - listitem:
+    - button "View Custom plugin indexes": Custom plugin indexes
+    - text: Experimental Adds a Discover tab to Plugins for browsing and installing bundles from plugin indexes you add.
+    - status
+    - switch "Enable Custom plugin indexes"
+  - listitem:
+    - button "View Auto authorization review": Auto authorization review
+    - text: Experimental Add an Auto review permission mode that uses the model to assess authorization before each tool call.
+    - status
+    - switch "Enable Auto authorization review"
+- heading "Installed plugins" [level=3]
+- list:
+  - listitem:
+    - button "View dsh-web-scaffold-defaults": dsh-web-scaffold-defaults
+    - status
+    - switch "Enable dsh-web-scaffold-defaults" [checked]

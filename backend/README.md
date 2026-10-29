@@ -46,6 +46,7 @@ Configure the first administrator's email and a password of at least 12 characte
 | Setting | Default | Purpose |
 |---|---|---|
 | `DSH_ENTERPRISE_HOST` / `DSH_ENTERPRISE_PORT` | `0.0.0.0` / `3090` | Container listener supplied by Compose |
+| `DSH_ENTERPRISE_PRODUCT_NAME` | `Atrix Harness` | Browser sign-in and completion product name; match Desktop's `productName` |
 | `DSH_ENTERPRISE_MODE` | `basic` | `basic` or `managed`; incomplete managed configuration rejects startup |
 | `DSH_ENTERPRISE_SESSION_SECONDS` | `86400` | Login hard lifetime, from 60 to 2592000 seconds |
 | `DSH_ENTERPRISE_AUTHORIZATION_SECONDS` | `300` | Browser authorization lifetime, from 60 to 1800 seconds |
@@ -73,19 +74,19 @@ Managed mode adds monthly budgets in USD and gateway usage filtered by employee,
 <a id="connect-enterprise-desktop"></a>
 ## Connect enterprise Desktop
 
-From the repository root on a macOS development machine, point the existing Desktop application at the deployed enterprise server. Replace the example origin with the server's `DSH_ENTERPRISE_ORIGIN`. The shell reuses the desktop welcome page and opens enterprise browser authorization:
+Desktop reads `apps/desktop/config/desktop.json` during development. Missing enterprise fields default to enterprise name and product name `Atrix Harness`, application ID `com.atrix.desktop`, and origin `http://127.0.0.1:3090`. Edit the file for another deployment, then run from the repository root:
 
 ```sh
-DSH_DESKTOP_ENTERPRISE_CONFIG='{"appId":"local.example.enterprise","productName":"Enterprise development","origin":"https://dsh.example.com"}' pnpm run dev:desktop
+pnpm run dev:desktop
 ```
 
-Loopback HTTP is reserved for developing the server and Desktop on the same machine; the local Docker deployment uses `http://127.0.0.1:3092`. On an employee's computer, that address refers to the employee's own machine. Packaged Desktop requires HTTPS.
+The local Docker deployment and default Desktop use `http://127.0.0.1:3090`. Loopback HTTP is supported for this local service; remote services require HTTPS. Desktop opens enterprise sign-in even when no enterprise environment variables are set.
 
-Browser sign-in uses an expiring, one-use approval code bound to the desktop’s S256 PKCE verifier and a temporary `127.0.0.1` callback. Better Auth creates a separate desktop session after exchange; browser URLs carry no session tokens or model credentials. The completion page opens `dsh://open`. Cancelled or expired attempts cannot complete locally. Enterprise Welcome requires sign-in and provides no guest or manual API-key action. The Host starts only after the account and its configuration are prepared. The sidebar displays the employee name; its menu includes the email, Settings, and sign-out.
+Browser sign-in uses an expiring, one-use approval code bound to the desktop’s S256 PKCE verifier and a temporary `127.0.0.1` callback. Better Auth creates a separate desktop session after exchange; browser URLs carry no session tokens or model credentials. Sign-in and completion pages use the enterprise ribbon mark and the backend's `DSH_ENTERPRISE_PRODUCT_NAME` in both languages and themes. The completion page opens `dsh://open`. Cancelled or expired attempts cannot complete locally. Enterprise Welcome requires sign-in and provides no guest or manual API-key action. The Host starts only after the account and its configuration are prepared. The sidebar displays the employee name; its menu includes the email, Settings, and sign-out.
 
 Each authenticated `[enterpriseId, userId]` pair selects `<userData>/enterprise/accounts/<sha256>/`. The shell initializes that account's `profiles/desktop`, atomically replaces and verifies the model configuration and credential documents, then supplies both `DSH_HOME` and the profile path to the Host. Account switching stops the Host and restarts the application. Repeated logins reuse the account directory and preserve projects, conversations, attachments, and personal settings. The official CLI's default `~/.dsh` is not imported. Directory hashing provides namespacing, not protection against another person using the same operating-system account.
 
-Create an enterprise release settings file from [the Desktop template](deploy/desktop.env.example) and point `DSH_ENTERPRISE_PACKAGING_ENV` at its absolute path. Configure `DSH_DESKTOP_ENTERPRISE_CONFIG`, matching `DSH_DESKTOP_APP_ID`, `DSH_DESKTOP_ENTERPRISE_UPDATE_URL`, `DSH_DESKTOP_ENTERPRISE_POLICY_ORIGIN`, and an absolute PNG `DSH_DESKTOP_ENTERPRISE_ICON`, together with the existing [macOS signing and notarization settings](../apps/desktop/publishing/README.md). Signed releases require independent enterprise identity, HTTPS destinations, and supplied artwork. Packaged applications read sealed metadata; runtime environment variables cannot replace it. The update root contains `mac-arm64`, `mac-x64`, or `win-x64` directories holding the existing installer and channel metadata format.
+Create an enterprise release settings file from [the Desktop template](deploy/desktop.env.example) and point `DSH_ENTERPRISE_PACKAGING_ENV` at its absolute path. Configure `DSH_DESKTOP_ENTERPRISE_CONFIG`, matching `DSH_DESKTOP_APP_ID`, `DSH_DESKTOP_ENTERPRISE_UPDATE_URL`, `DSH_DESKTOP_ENTERPRISE_POLICY_ORIGIN`, and optionally an absolute PNG `DSH_DESKTOP_ENTERPRISE_ICON`, together with the existing [macOS signing and notarization settings](../apps/desktop/publishing/README.md). Signed releases require independent enterprise identity and HTTPS release destinations. Enterprise artwork is bundled by default. Packaged applications read desktop file settings over sealed metadata; runtime environment variables cannot replace them. The update root contains `mac-arm64`, `mac-x64`, or `win-x64` directories holding the existing installer and channel metadata format.
 
 ```sh
 DSH_ENTERPRISE_PACKAGING_ENV=/absolute/enterprise-release.env pnpm --filter @deepseek-ai/dsh-desktop run package:mac:arm64
@@ -93,14 +94,14 @@ DSH_ENTERPRISE_PACKAGING_ENV=/absolute/enterprise-release.env pnpm --filter @dee
 
 Employees can open Settings → Models to add local custom providers, API addresses, credentials, and model IDs alongside the enterprise route. Local providers, credentials, and a local default model survive server synchronization, sign-out, and repeated sign-in to the same account. The enterprise route is refreshed from the backend; use a distinct route ID for personal providers. Personal provider calls go directly to that provider and are outside enterprise LiteLLM budgets and usage.
 
-The enterprise profile disables official account and wallet UI, telemetry, plugin installation services and tools, runtime self-modification, and unapproved default search. The shell provides no package manager or Desktop CLI installation action. The destructive third-party-plugin recovery action is omitted. Existing Office skills and local execution retain the official sandbox and approval semantics; company-specific SOP content must be approved before packaging.
+Enterprise sign-in retains telemetry, the plugin market and management UI, preset plugin-management tools, runtime self-modification, and search with their standard configuration and credential requirements. The shell supplies its package manager, Desktop CLI installation, and third-party-plugin recovery for the current account. Recovery backs up the profile patch; the next startup prepares enterprise configuration before starting the Host. Official account and wallet UI are replaced by enterprise account UI. Existing Office skills and local execution retain the official sandbox and approval semantics. Enterprise sign-in adds no SOP, template, or external-integration approval requirement; supported plugins and MCP connections remain available. Release URLs accept any configured HTTPS host.
 
 -----
 
 <a id="run-locally-with-docker"></a>
 ## Run locally with Docker
 
-The [local overlay](deploy/compose.local.yml) publishes the account service and `/admin` at `http://127.0.0.1:3092`, and the update policy at `http://127.0.0.1:3091/api/v0/check_client_update`. PostgreSQL and runtime data use named volumes in the `dsh-enterprise-local` project. No domain is required.
+The [local overlay](deploy/compose.local.yml) publishes the account service and `/admin` at `http://127.0.0.1:3090`, and the update policy at `http://127.0.0.1:3091/api/v0/check_client_update`. PostgreSQL and runtime data use named volumes in the `dsh-enterprise-local` project. No domain is required.
 
 From the repository root, create a private `.artifacts/enterprise-local/.env` from [the environment template](deploy/.env.example), restrict it to its owner, and fill the required settings described under [Run the service](#run-the-service). The overlay supplies the loopback origin and container runtime directory. Select the private file explicitly:
 
@@ -109,7 +110,7 @@ export DSH_ENTERPRISE_ENV_FILE="$PWD/.artifacts/enterprise-local/.env"
 docker compose --project-name dsh-enterprise-local --env-file "$DSH_ENTERPRISE_ENV_FILE" -f backend/deploy/compose.yml -f backend/deploy/compose.local.yml up --build --detach --wait
 ```
 
-Open `/admin` and sign in with the configured administrator. To connect development Desktop, use `http://127.0.0.1:3092` in the [Desktop command](#connect-enterprise-desktop). Set `DSH_ENTERPRISE_LOCAL_PORT` in the private environment file to change the account-service port. After the image is built, use `up --detach --no-build --wait` with the same Compose arguments to start existing services, or `stop` to stop them while retaining data. Removing volumes deletes the deployment's data. The update endpoint serves a policy only until signed installers and channel metadata are supplied.
+Open `/admin` and sign in with the configured administrator. To connect development Desktop, use `http://127.0.0.1:3090` in the [Desktop command](#connect-enterprise-desktop). Set `DSH_ENTERPRISE_LOCAL_PORT` in the private environment file to change the account-service port. After the image is built, use `up --detach --no-build --wait` with the same Compose arguments to start existing services, or `stop` to stop them while retaining data. Removing volumes deletes the deployment's data. The update endpoint serves a policy only until signed installers and channel metadata are supplied.
 
 -----
 
@@ -156,7 +157,7 @@ The main process stores the login token through Electron `safeStorage`, separate
 
 Live rotation first writes a new endpoint-and-key-derived credential reference, then updates only the enterprise provider through Host RPC. The default model follows backend changes while its provider is enterprise; a personal default is retained. Managed default changes reject calls using stale inherited permissions until configuration sync reconciles the employee’s gateway key; provisioning failures leave the account unavailable and retry on its next sync. Old references survive until Host exit so prepared requests can finish. Partial or uncertain writes stop the Host. Shutdown and credential-cleanup failures prevent account switching; history is preserved. Already issued upstream requests are not guaranteed to stop immediately after employee deactivation.
 
-Local execution can send file content, screenshots, and tool results to the selected model provider; managed mode additionally sends them through the backend and LiteLLM. Approve data categories and outbound network policy for the pilot. The backend does not duplicate model accounting, expose prompt logs in usage responses, or provide wallets, payments, SSO, department billing, or multi-tenant administration.
+Local execution can send file content, screenshots, and tool results to the selected model provider; managed mode additionally sends them through the backend and LiteLLM. The backend does not duplicate model accounting, expose prompt logs in usage responses, or provide wallets, payments, SSO, department billing, or multi-tenant administration.
 
 -----
 

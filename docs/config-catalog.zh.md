@@ -626,6 +626,23 @@ export type OnboardingProcess = 'compact' | 'standard' | 'detailed'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-account -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-enterprise-account -->
+<a id="deepseek-aidsh-client-ui-settings-enterprise-account"></a>
+
+## `@deepseek-ai/dsh-client-ui-settings-enterprise-account`
+
+- `inject`: `systemPrompt`
+- `source`: [`packages/client/ui-settings-enterprise-account/src/index.ts:12`](../packages/client/ui-settings-enterprise-account/src/index.ts)
+
+```ts config-catalog
+/** Enterprise identity resolved from desktop file configuration. */
+export interface Config {
+  /** Name every enterprise agent uses when identifying itself. */
+  agentName: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-enterprise-account -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-models -->
 <a id="deepseek-aidsh-client-ui-settings-models"></a>
 
@@ -4740,7 +4757,6 @@ export interface Config {
 | `@deepseek-ai/dsh-client-ui-session` | — | [`packages/client/ui-session/src/index.ts`](../packages/client/ui-session/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings` | — | [`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-agent-loop` | — | [`packages/client/ui-settings-agent-loop/src/index.ts`](../packages/client/ui-settings-agent-loop/src/index.ts) |
-| `@deepseek-ai/dsh-client-ui-settings-enterprise-account` | — | [`packages/client/ui-settings-enterprise-account/src/index.ts`](../packages/client/ui-settings-enterprise-account/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-general` | — | [`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-plugin-inventory` | — | [`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-plugins` | — | [`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts) |

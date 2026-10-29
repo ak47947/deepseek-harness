@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveDesktopLocale } from '../src/locale.ts'
+import { enterpriseDesktopLocale } from '../src/enterprise-branding.ts'
 import { needsWelcome, WELCOME_IPC } from '../src/welcome-api.ts'
 
 const electron = vi.hoisted(() => ({
@@ -73,6 +74,16 @@ describe('desktop welcome window', () => {
       expect(options.vibrancy).toBeUndefined()
       expect(options.backgroundMaterial).toBeUndefined()
     }
+  })
+
+  it('passes the configured enterprise name into the isolated welcome preload', async () => {
+    electron.create.mockReturnValue(createWindow())
+    await openWelcomeWindow(enterpriseDesktopLocale(resolveDesktopLocale('en'), 'Atrix Harness'), { ...operations, enterprise: true })
+    expect(electron.create.mock.calls[0]![0]).toMatchObject({
+      title: 'Atrix Harness', webPreferences: {
+        additionalArguments: ['--dsh-welcome-locale=en', '--dsh-welcome-enterprise', '--dsh-welcome-product-name=Atrix Harness'],
+      },
+    })
   })
 
   it('waits for its local document and blocks renderer navigation', async () => {

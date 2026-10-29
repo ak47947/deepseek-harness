@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { FiberState } from '@deepseek-ai/cordis'
 
 const repoRoot = fileURLToPath(new URL('../../../../../../', import.meta.url))
-const bin = join(repoRoot, 'apps/cli/lib/bin.js')
+const bin = join(repoRoot, 'apps/web/tests/fixtures/desktop-renderer-host.mjs')
 const built = existsSync(bin) && existsSync(join(repoRoot, 'apps/web/dist/index.html'))
 const failures = [
   ['import', 'missing.mjs'],

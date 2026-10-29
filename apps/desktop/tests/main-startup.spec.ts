@@ -20,6 +20,13 @@ type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
 const fileDrag = vi.hoisted(() => ({ dispose: vi.fn<() => Promise<void>>(), install: vi.fn() }))
 vi.mock('../src/file-drag.ts', () => ({ installDesktopFileDrag: () => { fileDrag.install(); return fileDrag.dispose } }))
 
+vi.mock('../src/desktop-configuration.ts', async () => {
+  const { resolveEnterpriseDesktopConfig } = await import('../src/enterprise-config.ts')
+  return { readDesktopConfiguration: () => resolveEnterpriseDesktopConfig(process.env.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined
+    ? { appId: 'test.enterprise.desktop', enterpriseName: 'DeepSeek Harness', productName: 'DeepSeek Harness', origin: 'https://enterprise.example.test' }
+    : JSON.parse(process.env.DSH_DESKTOP_ENTERPRISE_CONFIG), true) }
+})
+
 vi.mock('../src/web-document.ts', () => ({ authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn() }))
 // Report persistence has its own unit tests; here it resolves within microtasks so the fatal
 // dialog never outlives the test that triggered it.
@@ -360,9 +367,12 @@ vi.mock('../src/login-shell-environment.ts', async importOriginal => ({
   readDesktopLoginShellEnvironment: harness.loginShell,
 }))
 vi.mock('../src/runtime-tree.ts', () => ({ readDesktopRuntime: () => ({ release: { version: '1.0.0' } }) }))
-vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: 'desktop-test-profile' }) }))
+vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: (home?: string) => ({
+  profile: home === undefined || home === 'desktop-test-home' ? 'desktop-test-profile' : join(home, 'profiles', 'desktop'),
+}) }))
 vi.mock('../src/project-manager.ts', () => ({
   DesktopProjectManager: class {
+    constructor(readonly paths: { profile: string }) {}
     readonly applyRelease = harness.applyRelease
     disableAllPlugins = harness.disableAllPlugins
 
@@ -393,6 +403,7 @@ vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: class
   readonly install = harness.updateInstall
   readonly dispose = vi.fn()
 } }))
+vi.mock('../src/update-capability.ts', () => ({ desktopUpdateSupported: () => true }))
 vi.mock('../src/platform-view.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/platform-view.ts')>(),
   DesktopPlatformView: class {
@@ -408,7 +419,10 @@ vi.mock('../src/welcome-backend.ts', () => ({
   connectDesktopWelcome: async () => ({
     analyticsEnabled: async () => harness.analyticsEnabled,
     report: harness.analytics,
-    readLocalePreference: async () => null,
+    readLocalePreference: async () => {
+      const value = await harness.hosts.at(-1)!.fetch()
+      return ((await value.json()) as { localePreference?: null }).localePreference ?? null
+    },
     read: async (): Promise<unknown> => (await harness.hosts.at(-1)!.fetch()).json() as Promise<unknown>,
     save: async () => ({ ok: true }),
     account: { watch: harness.watchAccount, state: async () => ({ status: 'signed-out', attempt: null }) },
@@ -439,7 +453,7 @@ function applicationMenuItems(): MenuItemConstructorOptions[] {
   return harness.menu.mock.lastCall![0]
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetModules()
   vi.clearAllMocks()
   harness.dialog.showMessageBox.mockReset()
@@ -470,6 +484,26 @@ beforeEach(() => {
   vi.stubEnv('DSH_DESKTOP_UPDATE_JOURNAL_DIR', undefined)
   vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
   harness.analyticsEnabled = true
+  const { DesktopEnterpriseSession } = await import('../src/enterprise-session.ts')
+  const profile = await import('../src/enterprise-profile.ts')
+  const { enterpriseSessionSchema } = await import('@deepseek-ai/dsh-enterprise/protocol')
+  const account = enterpriseSessionSchema.parse({
+    enterpriseId: 'company', userId: 'alice', name: 'Alice', email: 'alice@example.test', role: 'user',
+    expiresAt: '2099-01-01T00:00:00.000Z', provisioning: {
+      mode: 'basic', api: 'openai-completions', baseURL: 'https://provider.example.test/v1', apiKey: 'test-key',
+      models: [{ id: 'approved', name: 'Approved', contextWindow: 128000, maxTokens: 8192, input: ['text'] }],
+      defaultModel: 'approved',
+    },
+  })
+  vi.spyOn(DesktopEnterpriseSession.prototype, 'restore').mockResolvedValue(true)
+  vi.spyOn(DesktopEnterpriseSession.prototype, 'session', 'get').mockReturnValue(account)
+  vi.spyOn(DesktopEnterpriseSession.prototype, 'authorized', 'get').mockReturnValue(true)
+  vi.spyOn(DesktopEnterpriseSession.prototype, 'paths', 'get').mockReturnValue({ ...profile.enterpriseAccountPaths(userData, account), home: 'desktop-test-home', profile: 'desktop-test-profile' })
+  vi.spyOn(DesktopEnterpriseSession.prototype, 'prepareAndCommit').mockImplementation(prepare => prepare())
+  vi.spyOn(DesktopEnterpriseSession.prototype, 'startSynchronization').mockImplementation(() => {})
+  vi.spyOn(profile, 'prepareEnterpriseProfile').mockResolvedValue()
+  vi.spyOn(profile, 'writeEnterpriseCredentials').mockResolvedValue()
+  vi.spyOn(profile, 'resolveEnterpriseClientEntry').mockReturnValue('/test/enterprise-account/index.js')
 })
 
 afterEach(async () => {
@@ -541,7 +575,7 @@ describe('desktop main startup', () => {
     })
   })
 
-  it('destroys the enterprise renderer before stopping its Host and waits for sign-out cleanup before restarting', async () => {
+  it.each(['sign-out', 'plugin-recovery'])('keeps enterprise management available and waits for %s cleanup before restarting', async (action) => {
     harness.app.isPackaged = false
     vi.stubEnv('DSH_DESKTOP_ENTERPRISE_CONFIG', JSON.stringify({
       appId: 'test.enterprise.desktop', productName: 'Enterprise test', origin: 'http://127.0.0.1:3090',
@@ -568,7 +602,34 @@ describe('desktop main startup', () => {
     vi.spyOn(profile, 'writeEnterpriseCredentials').mockResolvedValue()
     vi.spyOn(profile, 'resolveEnterpriseClientEntry').mockReturnValue('/test/enterprise-account/index.js')
     const host = await readyForUpdate()
+    expect(host.packageManager).toMatchObject({ pnpm: 'test-pnpm' })
     await Promise.resolve(invoke(DESKTOP_IPC.boot))
+    await vi.waitFor(() => { expect(harness.analytics).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'desktop_app_launch' })) })
+    harness.publishAccount({
+      status: 'signed-out',
+      links: { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' },
+      attempt: { id: 'enterprise-ignored-attempt' as NonNullable<AccountView['attempt']>['id'], phase: 'waiting-browser',
+        authorizeUrl: 'https://platform.deepseek.com/dsh/authorize' },
+    })
+    expect(harness.openExternal).not.toHaveBeenCalled()
+    const applicationMenu = invoke(DESKTOP_IPC.windowsMenu, 'app', 'application', 48, 34)
+    expect(harness.menu.buildFromTemplate.mock.lastCall![0].map(item => item.label)).toContain(en.cliCommandMenu)
+    harness.popup.mock.lastCall![0].callback!()
+    await applicationMenu
+    if (action === 'plugin-recovery') {
+      harness.dialog.showMessageBox.mockResolvedValue({ response: 2, checkboxChecked: false })
+      host.onFailure!(new Error('external plugin failed'))
+      await host.stopping.promise
+      expect(harness.disableAllPlugins).not.toHaveBeenCalled()
+      host.exited.resolve()
+      await vi.waitFor(() => { expect(harness.app.relaunch).toHaveBeenCalledOnce() })
+      expect(harness.disableAllPlugins.mock.contexts[0]).toMatchObject({ paths: { profile: host.profile } })
+      expect(host.profile).toContain(profile.enterpriseAccountPaths(harness.app.getPath('userData'), account).home)
+      expect(harness.dialog.showMessageBox.mock.calls[0]?.[0]).toMatchObject({
+        buttons: [en.exitApplication, en.restartApplication, en.disableThirdPartyPlugins],
+      })
+      return
+    }
     const window = harness.windows[0]!
     const signingOut = invoke('dsh-enterprise:sign-out', 'app')
     await host.stopping.promise
@@ -673,7 +734,7 @@ describe('desktop main startup', () => {
     expect({ menu: [{ label: about!.label, role: about!.role }, separator], options: { ...options, iconPath: '<app icon>' } })
       .toEqual(expected[`${platform}:${locale}`])
     expect(options.iconPath).toBe(packaged ? join('desktop-test-resources', 'icon.png')
-      : join('desktop-test-app', 'resources', 'icon-windows.png'))
+      : join('desktop-test-app', 'resources', 'enterprise', 'icon-windows.png'))
     if (platform !== 'win32') { expect(about!.click).toBeUndefined(); return }
     // Windows reuses the dimmed update dialog because Electron's fallback is a bare message box.
     harness.dialog.showMessageBox.mockResolvedValueOnce({ response: 0 })
@@ -1189,14 +1250,13 @@ describe('desktop main startup', () => {
     expect(callback).toHaveBeenLastCalledWith({})
   })
 
-  it('shares login key discovery with onboarding and rejects foreign renderers', async () => {
+  it('reports enterprise account readiness and rejects foreign renderers', async () => {
     await readyForUpdate()
     const window = harness.windows[0]!
     const handler = harness.handlers.get(DESKTOP_IPC.onboardingApiKey)!
     const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
     await vi.waitFor(async () => { expect(await handler(event)).toBe(true) })
-    harness.hosts.at(-1)!.fetch.mockResolvedValueOnce(Response.json({ hasApiKey: false }))
-    await expect(handler(event)).resolves.toBe(false)
+    await expect(handler(event)).resolves.toBe(true)
     await expect(handler({ ...event, sender: {} })).rejects.toThrow()
   })
 
@@ -2558,14 +2618,15 @@ describe('desktop main startup', () => {
     await harness.hostStarted.promise
     const host = harness.hosts[0]!
     host.fetch.mockReturnValueOnce(preferences.promise)
-    const startup = expect(Promise.resolve(invoke(DESKTOP_IPC.boot))).rejects.toThrow('Desktop Host is unavailable')
+    const startup = Promise.resolve(invoke(DESKTOP_IPC.boot))
+    const rejected = expect(startup).rejects.toThrow('Desktop Host is unavailable')
     host.ready.resolve()
     await vi.waitFor(() => { expect(host.fetch).toHaveBeenCalledOnce() })
     host.exited.resolve()
     host.onFailure!(new Error('backend exited during startup preferences'))
     await harness.dialogShown.promise
     preferences.resolve(Response.json({ hasApiKey: true, localePreference: null }))
-    await startup
+    await rejected
     expect(harness.windows[0]!.urls).not.toContain('http://127.0.0.1:3080/?token=test')
     const failureDialog = harness.dialog.showMessageBox.mock.calls[0]![0] as { detail: string }
     expect(failureDialog.detail).toContain('backend exited during startup preferences')
@@ -2591,42 +2652,6 @@ describe('desktop main startup', () => {
     expect(window.urls).toEqual(['dsh-app://app/'])
     expect(harness.windows).toHaveLength(1)
   })
-})
-
-it.each(['failed', 'expired'] as const)('focuses DSH once when browser authorization becomes %s', async (phase) => {
-  await import('../src/main.ts')
-  await harness.preparing.promise
-  harness.prepared.resolve()
-  await harness.hostStarted.promise
-  harness.hosts[0]!.ready.resolve()
-  await Promise.resolve(invoke(DESKTOP_IPC.boot))
-  const window = harness.windows[0]!
-  window.focus.mockClear()
-  const state: AccountView = {
-    status: 'signed-out', links: { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' },
-    attempt: { id: 'test-failed-attempt' as NonNullable<AccountView['attempt']>['id'], phase },
-  }
-  harness.publishAccount(state)
-  harness.publishAccount(state)
-  expect(window.focus).toHaveBeenCalledTimes(1)
-})
-
-it.each([['light', false], ['dark', true]] as const)('opens Platform authorization in the effective %s palette', async (theme, shouldUseDarkColors) => {
-  await import('../src/main.ts')
-  await harness.preparing.promise
-  harness.prepared.resolve()
-  await harness.hostStarted.promise
-  harness.hosts[0]!.ready.resolve()
-  await Promise.resolve(invoke(DESKTOP_IPC.boot))
-  harness.nativeTheme.shouldUseDarkColors = shouldUseDarkColors
-  const state: AccountView = {
-    status: 'signed-out', links: { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' },
-    attempt: { id: 'test-theme-attempt' as NonNullable<AccountView['attempt']>['id'], phase: 'waiting-browser',
-      authorizeUrl: 'https://platform.deepseek.com/dsh/authorize?state=state-1' },
-  }
-  harness.publishAccount(state)
-  harness.publishAccount(state)
-  expect(harness.openExternal).toHaveBeenCalledExactlyOnceWith(`https://platform.deepseek.com/dsh/authorize?state=state-1&theme=${theme}`)
 })
 
 it('disables native product events for a disabled Desktop launch', async () => {
