@@ -15,11 +15,11 @@
   en: 31b091f6e3e95d8a
   zh: c9bb6288340809de
 /enterprise-agent-desktop-architecture-and-delivery-plan/1-initial-scope:
-  en: 498aa9120ba05c2f
-  zh: f4443c848619c027
+  en: a90358bea436574d
+  zh: 23132d2d3fdf711a
 /enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities:
-  en: 3d70f90802d79867
-  zh: c7aca25b0e255f07
+  en: 683d51fb145d5ada
+  zh: c815a17e4657b718
 /enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities/better-auth-and-the-administration-ui:
   en: f4f5f055eccec3b8
   zh: e5d94f94f2150a7e
@@ -30,20 +30,23 @@
   en: 9aec0b4ad6f448ea
   zh: 7138a89945ff3cc3
 /enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration:
-  en: c07ff0f37ba7ddca
-  zh: d5a7be5d4fb19037
+  en: 0b52831b92a479fb
+  zh: f20e4bcd02e5be4b
 /enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/sign-in-and-configuration-synchronization:
-  en: 291cada15ec0b0f4
-  zh: 574a013ece76147e
+  en: c73a61e86c9060fc
+  zh: d7111916b310c20e
+/enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/oidc-sign-in-and-account-provisioning-requirements:
+  en: dcdf63042d587432
+  zh: a3aa5815cbc9ad07
 /enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/accounts-and-local-data-isolation:
   en: 10017214aceba96c
   zh: b1976320e4ae6ad3
 /enterprise-agent-desktop-architecture-and-delivery-plan/4-enterprise-sign-in-and-desktop-integration/sign-out-and-deactivation:
-  en: 05567dfe61043ffb
-  zh: 6094cb45e123a425
+  en: 71e8b0849b0eddcf
+  zh: e181293051a5300e
 /enterprise-agent-desktop-architecture-and-delivery-plan/5-model-provisioning-and-cost-management:
-  en: 002118aa90fb323d
-  zh: b5d36d06dc6e57fd
+  en: 9e794c8181b3f671
+  zh: 9ffa7b3079169973
 /enterprise-agent-desktop-architecture-and-delivery-plan/6-local-execution-and-data-handling:
   en: 5cb2003486a32ca5
   zh: b3ec79c478738b65
@@ -51,17 +54,17 @@
   en: 638fd170d8eeea3a
   zh: fe8045e1df29b236
 /enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/delivery-sequence:
-  en: 675e4a223a157288
-  zh: 1d8164587f4f4d4a
+  en: d4e86da4eb37cfaa
+  zh: 7f720967e45b083f
 /enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/deployment-and-resources:
-  en: f3d130727d4955da
-  zh: 0408215c45e25d09
+  en: 7d0018002124b5b9
+  zh: 05fb0dd3adb9a96f
 /enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/required-acceptance-results:
-  en: 881a43036d4592f7
-  zh: 040e94d5a7e73117
+  en: 41d5b7f3d8a59da5
+  zh: 2d993884e195d734
 /enterprise-agent-desktop-architecture-and-delivery-plan/8-future-extensions:
-  en: 532f177cc2ef05b8
-  zh: 039ca72e5656e1fe
+  en: 1a9b22b323bccd5d
+  zh: a84de2cd8a33a2ac
 /enterprise-agent-desktop-architecture-and-delivery-plan/dev-note:
-  en: aca0e00ec032087b
-  zh: 3739a023f189e9ff
+  en: ee22d0cd728dced3
+  zh: 96097c3d95a4c3f5

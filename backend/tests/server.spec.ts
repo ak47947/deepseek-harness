@@ -1,65 +1,11 @@
 /** Real HTTP and PostgreSQL-protocol integration; PGlite replaces only the external database process. */
-import { afterEach, describe, expect, it } from 'vitest'
-import pg from 'pg'
-import { PGlite } from '@electric-sql/pglite'
-import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
+import { describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import { EnterpriseServer } from '../src/server.ts'
-import { resolveEnterpriseConfig } from '../src/config.ts'
 import { enterpriseSessionSchema } from '../src/protocol.ts'
 import { EnterpriseDepartments } from '../src/departments.ts'
+import { fixture } from './fixtures/enterprise.ts'
 
-const cleanup: Array<() => Promise<void>> = []
-afterEach(async () => {
-  for (const close of cleanup.splice(0).reverse()) await close()
-})
-
-async function fixture(mode: 'basic' | 'managed' = 'basic', send: typeof fetch = fetch) {
-  const db = await PGlite.create()
-  cleanup.push(() => db.close())
-  const socket = new PGLiteSocketServer({ db, port: 0, host: '127.0.0.1', maxConnections: 8 })
-  await socket.start()
-  cleanup.push(async () => {
-    await expect.poll(() => socket.getStats()).toMatchObject({ activeConnections: 0, queuedQueries: 0 })
-    await socket.stop()
-  })
-  const connectionString = `postgresql://postgres@${socket.getServerConn()}/postgres`
-  const pool = new pg.Pool({ connectionString, max: 4 })
-  const config = resolveEnterpriseConfig({
-    DSH_ENTERPRISE_ID: 'test-enterprise',
-    DSH_ENTERPRISE_ORIGIN: 'http://127.0.0.1',
-    DATABASE_URL: connectionString,
-    BETTER_AUTH_SECRET: 'test-only-enterprise-secret-at-least-32-characters',
-    DSH_ENTERPRISE_PORT: '0',
-    DSH_ENTERPRISE_BOOTSTRAP_EMAIL: 'admin@example.test',
-    DSH_ENTERPRISE_BOOTSTRAP_PASSWORD: 'test-admin-password',
-    DSH_ENTERPRISE_MODE: mode,
-    ...(mode === 'managed'
-      ? { DSH_ENTERPRISE_LITELLM_URL: 'http://127.0.0.1:9876', DSH_ENTERPRISE_LITELLM_KEY: 'test-management-key' }
-      : {}),
-  })
-  const server = new EnterpriseServer(pool, config, send)
-  cleanup.push(() => server.stop())
-  const port = await server.start()
-  const origin = `http://127.0.0.1:${String(port)}`
-  const request = async (path: string, token?: string, payload?: unknown) =>
-    fetch(`${origin}${path}`, {
-      method: payload === undefined ? 'GET' : 'POST',
-      headers: {
-        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-        'content-type': 'application/json',
-      },
-      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-    })
-  const login = async (email: string, password: string) => {
-    const response = await request('/api/auth/sign-in/email', undefined, { email, password })
-    expect(response.status, await response.clone().text()).toBe(200)
-    const result = (await response.json()) as { token: string }
-    return result.token
-  }
-  return { server, pool, request, login, origin }
-}
 
 const provisioning = {
   mode: 'basic',

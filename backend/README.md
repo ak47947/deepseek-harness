@@ -24,6 +24,7 @@ The top-level `backend/` directory owns authentication, administration, model co
 
 - [Run the service](#run-the-service)
 - [Manage employees and models](#manage-employees-and-models)
+- [Enable OIDC sign-in](#enable-oidc-sign-in)
 - [Connect enterprise Desktop](#connect-enterprise-desktop)
 - [Run locally with Docker](#run-locally-with-docker)
 - [Deploy and back up](#deploy-and-back-up)
@@ -50,6 +51,13 @@ Configure the first administrator's email and a password of at least 12 characte
 | `DSH_ENTERPRISE_MODE` | `basic` | `basic` or `managed`; incomplete managed configuration rejects startup |
 | `DSH_ENTERPRISE_SESSION_SECONDS` | `86400` | Login hard lifetime, from 60 to 2592000 seconds |
 | `DSH_ENTERPRISE_AUTHORIZATION_SECONDS` | `300` | Browser authorization lifetime, from 60 to 1800 seconds |
+| `DSH_ENTERPRISE_OIDC_ENABLED` | `0` | Set to `1` to enable enterprise OIDC sign-in; requires an HTTPS enterprise origin |
+| `DSH_ENTERPRISE_OIDC_ISSUER` / `DSH_ENTERPRISE_OIDC_DISCOVERY_URL` | unset | Exact HTTPS issuer and its discovery document URL |
+| `DSH_ENTERPRISE_OIDC_CLIENT_ID` / `DSH_ENTERPRISE_OIDC_CLIENT_SECRET` | unset | OIDC application credentials; required when OIDC is enabled |
+| `DSH_ENTERPRISE_OIDC_TOKEN_AUTH_METHOD` | `client_secret_basic` | Token endpoint client authentication; select `client_secret_post` when that is the application's registered method |
+| `DSH_ENTERPRISE_OIDC_DISPLAY_NAME` | `Company SSO` | Identity-provider name on the Desktop browser sign-in button |
+| `DSH_ENTERPRISE_OIDC_AUTO_PROVISION` | `0` | Create ordinary employees on first sign-in; enable only after restricting the application's IdP assignment to approved employees |
+| `DSH_ENTERPRISE_PASSWORD_ENABLED` | `1` | Set to `0` with OIDC enabled to hide employee password fields and reject employee password sign-in; administrator passwords remain available |
 | `DSH_ENTERPRISE_LITELLM_URL` / `DSH_ENTERPRISE_LITELLM_KEY` | unset | Private gateway URL and management credential; managed mode only |
 | `DSH_ENTERPRISE_UPSTREAM_TIMEOUT_MS` | `300000` | Maximum managed model request duration |
 | `DSH_ENTERPRISE_DIRECT_KEYS_REVOKED_AT` | unset | UTC confirmation of provider-key revocation when migrating existing basic assignments |
@@ -68,6 +76,21 @@ Administrators maintain departments as a tree: create top-level or child departm
 Administrators can reset passwords, change other employees' roles, and disable accounts. Password resets revoke login sessions. A disabled employee cannot obtain configuration or make new managed model requests. Basic mode reports that the administrator must revoke provider credentials separately. Managed mode saves gateway cleanup state independently; failed revocation remains visible with a retry action. Self-demotion and self-deactivation are refused. The backend serializes administrative mutations and rechecks the acting administrator after earlier changes settle.
 
 Managed mode adds monthly budgets in USD and gateway usage filtered by employee, model, and UTC date range, with pagination. Usage read failures display an unavailable state. The monthly budget counter and filtered request history have different scopes; provider bills remain the spending authority.
+
+-----
+
+<a id="enable-oidc-sign-in"></a>
+## Enable OIDC sign-in
+
+Register an OIDC application in the company's existing IdP with `<DSH_ENTERPRISE_ORIGIN>/api/auth/callback/enterprise-oidc` as its callback. In the private server environment file, enable `DSH_ENTERPRISE_OIDC_ENABLED=1` and configure the issuer, discovery URL, client ID, and client secret from the table above, then recreate the backend container with the same Compose configuration. Enabled OIDC requires complete configuration and an HTTPS enterprise origin; a discovered issuer that differs from the configured issuer rejects startup. Configure WeChat, WeCom, or Feishu login upstream in the IdP; the backend uses Better Auth Generic OAuth and has no channel-specific login component.
+
+By default, create the employee at `/admin`, open their action menu, and select SSO identity. Copy the exact `sub` from the IdP and check the displayed issuer before saving. Email addresses never implicitly link accounts. Only ordinary employees can use OIDC; administrators retain email/password sign-in. With employee passwords disabled, creation and password-reset controls omit employee passwords. Promoting a passwordless employee requires an administrator password and clears their OIDC binding and sessions.
+
+To enable automatic first-login provisioning, first restrict the IdP application's assignment to approved employees, excluding guests, public self-registration, and third-party identities without employee admission checks; verify that unassigned identities are rejected. Then set `DSH_ENTERPRISE_OIDC_AUTO_PROVISION=1`. New employees receive the ordinary user role and inherit platform default models. An email already owned by another account is rejected instead of merged. If application assignment cannot enforce admission, keep automatic provisioning disabled and use explicit employee bindings.
+
+OIDC uses browser-bound one-use state, S256 PKCE, nonce binding, JWKS signature verification, and issuer, audience, expiry, authorized-party, and verified-email checks. Identity records encode both issuer and subject; replacing an issuer never automatically reuses an old identity. Returning employees retain their stable ID, local history, departments, and models. Saving or clearing an SSO identity revokes browser/Desktop sessions and unexchanged Desktop codes without deleting employee data. Clearing requires an administrator to explicitly bind the identity again.
+
+Client secrets stay on the server; upstream access and ID tokens are not persisted or sent to Desktop. OIDC errors leave password sign-in available only when enabled. Administrators must revoke IdP access and separately deactivate the DSH employee, revoking their sessions; IdP deactivation alone does not invalidate issued DSH sessions. Online Desktop stops at its next status sync, while offline Desktop stops at hard expiry; basic-mode provider keys need separate revocation. HTTP and browser tests use a local signing OIDC provider; production issuer setup, application assignment, trusted HTTPS, and real callbacks require acceptance against the company's IdP.
 
 -----
 

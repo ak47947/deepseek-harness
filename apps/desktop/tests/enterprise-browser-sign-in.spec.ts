@@ -21,7 +21,12 @@ function fixture(accept: (token: string) => Promise<void> = async () => {}) {
       const request = z.object({ callbackUrl: z.url(), state: z.string(), codeChallenge: z.string() }).parse(body)
       challenge = request.codeChallenge
       created.resolve(request)
-      return Response.json({ authorizeUrl: 'https://enterprise.example/dsh/authorize?authorize_id=pending', expiresAt: Date.now() + 60000 })
+      return Response.json({ authorizeId: 'a'.repeat(43), authorizeUrl: 'https://enterprise.example/dsh/authorize?authorize_id=' + 'a'.repeat(43), expiresAt: Date.now() + 60000 })
+    }
+    if (url.pathname.endsWith('/cancel')) {
+      const cancelled = z.object({ authorizeId: z.literal('a'.repeat(43)), codeVerifier: z.string() }).parse(body)
+      expect(createHash('sha256').update(cancelled.codeVerifier).digest('base64url')).toBe(challenge)
+      return Response.json({ ok: true })
     }
     const exchange = z.object({ code: z.literal('c'.repeat(43)), codeVerifier: z.string() }).parse(body)
     expect(createHash('sha256').update(exchange.codeVerifier).digest('base64url')).toBe(challenge)
@@ -43,7 +48,7 @@ it('opens enterprise browser sign-in, rejects an unrelated callback, and redirec
   })
   const { flow, created, completed, open } = fixture(accept)
   const view = await flow.start('dark')
-  expect(open).toHaveBeenCalledExactlyOnceWith('https://enterprise.example/dsh/authorize?authorize_id=pending&theme=dark')
+  expect(open).toHaveBeenCalledExactlyOnceWith('https://enterprise.example/dsh/authorize?authorize_id=' + 'a'.repeat(43) + '&theme=dark')
   expect(await flow.start('light')).toEqual(view)
   const request = await created
   const unrelated = new URL(request.callbackUrl)
@@ -74,13 +79,14 @@ it('opens enterprise browser sign-in, rejects an unrelated callback, and redirec
 
 it('withdraws a waiting authorization and publishes cancellation without accepting an account', async () => {
   const accept = vi.fn(async (_token: string) => {})
-  const { flow } = fixture(accept)
+  const { flow, send } = fixture(accept)
   const listener = vi.fn<(view: AccountView) => void>()
   const off = flow.subscribe(listener)
   const view = await flow.start('light')
   const cancelled = await flow.cancel(view.attempt!.id)
   expect(cancelled.attempt?.phase).toBe('cancelled')
   expect(accept).not.toHaveBeenCalled()
+  expect(send.mock.calls.filter(([input]) => new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).pathname.endsWith('/cancel'))).toHaveLength(1)
   off()
   await flow.dispose()
   expect(listener.mock.lastCall?.[0].attempt?.phase).toBe('cancelled')

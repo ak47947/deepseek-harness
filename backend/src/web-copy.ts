@@ -1,5 +1,9 @@
 /** Locale-owned administration labels, validation guidance, and accessible control names. */
 const en = {
+  oidcLinked: 'SSO linked', oidcIdentity: 'SSO identity', oidcSubject: 'OIDC subject (sub)', oidcIssuer: 'OIDC issuer', clearOidc: 'Clear SSO identity',
+  oidcHelp: 'Copy the employee’s exact subject from the identity provider. Email addresses do not link accounts. Saving revokes existing sessions.',
+  createOidcEmployeeDescription: 'Create the employee, then explicitly bind their SSO identity from the action menu.',
+  confirmClearOidc: 'Clear this employee’s SSO identity and revoke existing sessions? An administrator must explicitly bind the identity again.',
   title: 'Enterprise administration', enterpriseConsole: 'Enterprise console', enterpriseWorkspace: 'Enterprise workspace',
   workspaceLabel: 'Workspace', overview: 'Overview', departments: 'Departments', userManagement: 'Users',
   modelConfiguration: 'Model configuration', budgetUsage: 'Budget and usage', welcome: 'Welcome back',
@@ -75,6 +79,10 @@ const en = {
 }
 
 const zh: Record<keyof typeof en, string> = {
+  oidcLinked: '已绑定统一身份', oidcIdentity: '统一登录身份', oidcSubject: 'OIDC 主体（sub）', oidcIssuer: 'OIDC 签发者（issuer）', clearOidc: '清除统一登录身份',
+  oidcHelp: '请从身份中心复制该员工准确的主体标识；邮箱不会自动关联账号。保存会撤销现有会话。',
+  createOidcEmployeeDescription: '创建员工后，请在操作菜单中明确绑定其统一登录身份。',
+  confirmClearOidc: '确定清除该成员的统一登录身份并撤销现有会话？后续需要管理员明确重新绑定。',
   title: '企业管理后台', enterpriseConsole: '企业管理控制台', enterpriseWorkspace: '企业工作空间',
   workspaceLabel: '工作空间', overview: '工作台概览', departments: '部门管理', userManagement: '用户管理',
   modelConfiguration: '模型配置', budgetUsage: '额度与用量', welcome: '欢迎回来',

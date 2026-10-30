@@ -4,6 +4,7 @@ import { createServer, type Server } from 'node:http'
 import { z } from 'zod'
 import type { AccountView, SignInAttemptId, SignInAttemptView } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { EnterpriseDesktopConfig } from './enterprise-config.ts'
+import type { EnterpriseAuthorizationId } from '@deepseek-ai/dsh-enterprise/protocol'
 
 interface Attempt {
   readonly id: SignInAttemptId
@@ -13,6 +14,8 @@ interface Attempt {
   readonly server: Server
   timer: ReturnType<typeof setTimeout>
   busy: boolean
+  authorizeId?: EnterpriseAuthorizationId
+  withdrawal?: Promise<void>
 }
 
 /** One shell-owned sign-in flow; safe snapshots reuse the existing welcome presentation. */
@@ -20,6 +23,7 @@ export class EnterpriseBrowserSignIn {
   private attempt: Attempt | undefined
   private snapshot: SignInAttemptView | null = null
   private readonly listeners = new Set<(view: AccountView) => void>()
+  private readonly withdrawals = new Set<Promise<void>>()
 
   /**
    * @param config - Enterprise origin and deadlines.
@@ -119,7 +123,11 @@ export class EnterpriseBrowserSignIn {
         callbackUrl: `http://127.0.0.1:${String(address.port)}/oauth/callback`, state,
         codeChallenge: createHash('sha256').update(verifier).digest('base64url'),
       }, controller.signal)
-      const result = z.object({ authorizeUrl: z.url(), expiresAt: z.number() }).parse(payload)
+      const result = z.object({
+        authorizeId: z.string().regex(/^[A-Za-z0-9_-]{43}$/u).transform(value => value as EnterpriseAuthorizationId),
+        authorizeUrl: z.url(), expiresAt: z.number(),
+      }).parse(payload)
+      attempt.authorizeId = result.authorizeId
       if (result.expiresAt <= Date.now()) throw new Error('Enterprise authorization has expired')
       clearTimeout(attempt.timer)
       attempt.timer = setTimeout(() => {
@@ -135,6 +143,7 @@ export class EnterpriseBrowserSignIn {
     } catch (error) {
       if (!controller.signal.aborted) this.publish({ id, phase: 'failed', errorCode: 'network' })
       await this.close(attempt)
+      await this.withdraw(attempt)
       throw error
     }
   }
@@ -151,6 +160,7 @@ export class EnterpriseBrowserSignIn {
     attempt.controller.abort()
     this.publish({ id, phase })
     await this.close(attempt)
+    await this.withdraw(attempt)
     return this.view()
   }
 
@@ -160,8 +170,22 @@ export class EnterpriseBrowserSignIn {
     if (attempt !== undefined) {
       attempt.controller.abort()
       await this.close(attempt)
+      await this.withdraw(attempt)
     }
+    await Promise.all(this.withdrawals)
     this.listeners.clear()
+  }
+
+  private withdraw(attempt: Attempt): Promise<void> {
+    if (attempt.authorizeId === undefined) return Promise.resolve()
+    if (attempt.withdrawal !== undefined) return attempt.withdrawal
+    const pending = this.request('/api/auth/enterprise/desktop/cancel', { authorizeId: attempt.authorizeId, codeVerifier: attempt.verifier }, AbortSignal.timeout(this.config.requestTimeoutMs))
+      .then(() => {})
+      .catch((_error: unknown) => { console.error('Enterprise authorization cancellation could not be confirmed; the request expires on the server.') })
+      .finally(() => { this.withdrawals.delete(pending) })
+    this.withdrawals.add(pending)
+    attempt.withdrawal = pending
+    return pending
   }
 
   private async close(attempt: Attempt): Promise<void> {

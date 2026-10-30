@@ -1,0 +1,10 @@
+- dialog "SSO identity":
+  - heading "SSO identity" [level=2]
+  - paragraph: Alice · Copy the employee’s exact subject from the identity provider. Email addresses do not link accounts. Saving revokes existing sessions.
+  - button "Close"
+  - text: OIDC issuer
+  - textbox "OIDC issuer": https://idp.example.test
+  - text: OIDC subject (sub)
+  - textbox "OIDC subject (sub)": alice-subject
+  - button "Cancel"
+  - button "Save changes"

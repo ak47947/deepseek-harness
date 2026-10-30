@@ -13,7 +13,7 @@ function preference(key, value) {
 }
 const language = new URLSearchParams(location.search).get('lang') || preference('enterprise-language') || (navigator.language.startsWith('zh') ? 'zh' : 'en');
 const t = copy[language === 'zh' ? 'zh' : 'en'];
-const state = { employees: [], departments: [], collapsedDepartments: new Set(), platformDefault: null, mode: 'basic', viewerId: '', page: 1, route: 'overview', revision: 0, editing: null };
+const state = { employees: [], departments: [], collapsedDepartments: new Set(), platformDefault: null, oidcIssuer: null, passwordEnabled: true, mode: 'basic', viewerId: '', page: 1, route: 'overview', revision: 0, editing: null };
 const routes = { overview: ['overview', 'overviewDescription'], users: ['userManagement', 'usersDescription'], departments: ['departments', 'departmentsDescription'], models: ['modelConfiguration', 'modelsDescription'], usage: ['budgetUsage', 'usageDescription'] };
 const paths = {
   command: 'M9 7V5a2 2 0 1 0-2 2h10a2 2 0 1 0-2-2v14a2 2 0 1 0 2-2H7a2 2 0 1 0 2 2V7',
@@ -92,7 +92,7 @@ function fields(form) { return Object.fromEntries(new FormData(form)); }
 function badge(label, variant = '') { return node('span', 'badge ' + variant, label); }
 function identity(user) {
   const el = node('div', 'identity'); const avatar = node('span', 'avatar', user.name.slice(0, 2).toUpperCase()); avatar.setAttribute('aria-hidden', 'true');
-  const text = node('div', 'identity-text'); text.append(node('strong', '', user.name), node('small', '', user.email)); el.append(avatar, text); return el;
+  const text = node('div', 'identity-text'); text.append(node('strong', '', user.name), node('small', '', user.email)); if (user.oidcIdentity) text.append(node('small', '', t.oidcLinked)); el.append(avatar, text); return el;
 }
 function status(user) { return badge(user.gatewayState === 'cleanup-required' ? t.cleanup : user.banned ? t.disabled : user.assignment ? t.active : t.unconfigured, user.gatewayState === 'cleanup-required' ? 'warning' : user.banned ? 'neutral' : user.assignment ? 'success' : 'warning'); }
 function cell(content, className = '') { const td = node('td', className); td.append(typeof content === 'string' ? document.createTextNode(content) : content); return td; }
@@ -106,7 +106,7 @@ async function refresh() {
   const revision = ++state.revision;
   const [data, departments, defaults] = await Promise.all([api('/v1/admin/employees'), api('/v1/admin/departments'), api('/v1/admin/platform-default')]);
   if (revision !== state.revision) return;
-  state.employees = data.employees; state.departments = departments.departments; state.mode = data.mode; state.viewerId = data.viewerId;
+  state.employees = data.employees; state.departments = departments.departments; state.mode = data.mode; state.viewerId = data.viewerId; state.oidcIssuer = data.oidcIssuer; state.passwordEnabled = data.passwordEnabled;
   state.platformDefault = defaults.configuration;
   $('login').hidden = true; $('workspace').hidden = false;
   const viewer = state.employees.find(user => user.id === state.viewerId);
@@ -140,12 +140,14 @@ function renderUsers() {
     const actions = node('div', 'row-actions'); actions.append(action(t.configure, () => edit(user)));
     const menu = node('details', 'row-menu'); const trigger = node('summary'); trigger.setAttribute('aria-label', format('moreActions', { name: user.name })); trigger.append(icon('more'));
     const list = node('div', 'row-menu-content');
+    if (state.oidcIssuer && user.role === 'user') list.append(action(t.oidcIdentity, () => { menu.open = false; editOidc(user); }));
+    if (user.oidcIdentity) list.append(action(t.clearOidc, () => { menu.open = false; clearOidc(user); }, 'danger'));
     for (const [label, fn, disabled, danger] of [
       [t.changeDepartment, () => changeDepartment(user), false, false],
       [t.reset, () => resetPassword(user), false, false],
       [t.changeRole, () => changeRole(user), user.id === state.viewerId, false],
       [user.gatewayState === 'cleanup-required' ? t.retry : t.disable, () => disable(user), user.id === state.viewerId || (user.banned && user.gatewayState !== 'cleanup-required'), true],
-    ]) { const button = action(label, () => { menu.open = false; fn(); }, danger ? 'danger' : ''); button.disabled = disabled; list.append(button); }
+    ]) { if (label === t.reset && !state.passwordEnabled && user.role !== 'admin') continue; const button = action(label, () => { menu.open = false; fn(); }, danger ? 'danger' : ''); button.disabled = disabled; list.append(button); }
     menu.append(trigger, list); menu.addEventListener('focusout', event => { if (!menu.contains(event.relatedTarget)) menu.open = false; }); actions.append(menu);
     row.append(cell(identity(user)), cell(department ? department.name : t.unassigned, department ? '' : 'muted'), cell(role), cell(status(user)), cell(actions)); return row;
   }));
@@ -251,11 +253,13 @@ function editor(title, description, build, submit, label = t.save, danger = fals
 }
 async function mutation(path, data, dialog = 'editor', message = t.saved) { const result = await api(path, data); $(dialog).close(); await refresh(); notice(typeof message === 'function' ? message(result) : message); }
 function createEmployee() {
-  editor(t.createEmployee, t.createEmployeeDescription, body => {
+  editor(t.createEmployee, state.passwordEnabled ? t.createEmployeeDescription : t.createOidcEmployeeDescription, body => {
     const name = field(t.name, 'name'); name.input.maxLength = 256;
     const email = field(t.email, 'email', 'email'); email.input.autocomplete = 'off';
     const password = field(t.initialPassword, 'password', 'password'); password.input.minLength = 12; password.input.maxLength = 128; password.input.autocomplete = 'new-password';
     const role = field(t.role, 'role', 'select'); setOptions(role.input, [[t.employee, 'user'], [t.administrator, 'admin']], 'user');
+    const updatePassword = () => { const enabled = state.passwordEnabled || role.input.value === 'admin'; password.wrapper.hidden = !enabled; password.input.disabled = !enabled; password.input.required = enabled; };
+    role.input.addEventListener('change', updatePassword); updatePassword();
     body.append(name.wrapper, email.wrapper, password.wrapper, role.wrapper);
   }, data => mutation('/v1/admin/employees', data), t.createEmployee);
 }
@@ -272,11 +276,25 @@ function deleteDepartment(department) { editor(t.deleteDepartment, department.na
 function changeDepartment(user) {
   editor(t.changeDepartment, user.name + ' · ' + t.departmentHelp, body => { const select = field(t.department, 'departmentId', 'select'); select.input.required = false; setOptions(select.input, [[t.unassigned, ''], ...departmentOptions()], user.departmentId || ''); body.append(select.wrapper); }, data => mutation(employeePath(user, 'department'), { departmentId: data.departmentId || null }));
 }
+function editOidc(user) {
+  editor(t.oidcIdentity, user.name + ' · ' + t.oidcHelp, body => {
+    if (user.oidcIdentity) body.append(node('p', '', user.oidcIdentity.issuer + ' · ' + user.oidcIdentity.subject));
+    const issuer = field(t.oidcIssuer, 'issuer', 'text', state.oidcIssuer); issuer.input.readOnly = true;
+    const subject = field(t.oidcSubject, 'subject', 'text', user.oidcIdentity ? user.oidcIdentity.subject : ''); subject.input.maxLength = 255;
+    body.append(issuer.wrapper, subject.wrapper);
+  }, data => mutation(employeePath(user, 'oidc'), { subject: data.subject }));
+}
+function clearOidc(user) {
+  editor(t.clearOidc, user.name, body => body.append(node('p', '', t.confirmClearOidc)), () => mutation(employeePath(user, 'oidc'), { subject: null }), t.clearOidc, true);
+}
 function resetPassword(user) {
   editor(t.reset, user.name + ' · ' + t.passwordDescription, body => { const password = field(t.newPassword, 'password', 'password'); password.input.minLength = 12; password.input.maxLength = 128; password.input.autocomplete = 'new-password'; body.append(password.wrapper); }, data => mutation(employeePath(user, 'password'), data));
 }
 function changeRole(user) {
-  editor(t.changeRole, user.name, body => body.append(node('p', '', t.confirmRole + ' ' + (user.role === 'admin' ? t.administrator + ' → ' + t.employee : t.employee + ' → ' + t.administrator))), () => mutation(employeePath(user, 'role'), { role: user.role === 'admin' ? 'user' : 'admin' }));
+  editor(t.changeRole, user.name, body => {
+    body.append(node('p', '', t.confirmRole + ' ' + (user.role === 'admin' ? t.administrator + ' → ' + t.employee : t.employee + ' → ' + t.administrator)));
+    if (user.role !== 'admin' && !state.passwordEnabled) { const password = field(t.initialPassword, 'password', 'password'); password.input.minLength = 12; password.input.maxLength = 128; password.input.autocomplete = 'new-password'; body.append(password.wrapper); }
+  }, data => mutation(employeePath(user, 'role'), { role: user.role === 'admin' ? 'user' : 'admin', ...data }));
 }
 function disable(user) {
   const cleanup = user.gatewayState === 'cleanup-required';

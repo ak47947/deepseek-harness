@@ -1,0 +1,4 @@
+- text: Atrix Harness
+- heading "使用企业账号登录 Atrix Harness" [level=1]
+- button "通过 Company SSO 登录"
+- alert

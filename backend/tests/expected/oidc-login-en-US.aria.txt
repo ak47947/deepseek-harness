@@ -1,0 +1,4 @@
+- text: Atrix Harness
+- heading "Sign in to Atrix Harness with your enterprise account" [level=1]
+- button "Sign in with Company SSO"
+- alert

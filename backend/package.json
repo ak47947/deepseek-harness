@@ -18,11 +18,12 @@
   },
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/cordis-plugin-logger-console": "workspace:~",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "better-auth": "1.7.14",
+    "jose": "^6.2.3",
     "pg": "^8.16.3",
-    "zod": "^4.4.3",
-    "@deepseek-ai/cordis-plugin-logger-console": "workspace:~"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",

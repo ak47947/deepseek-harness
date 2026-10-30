@@ -15,6 +15,7 @@ import { LiteLlmGateway } from './litellm.ts'
 import { enterpriseSessionSchema, provisioningSchema, EnterpriseRequestError } from './protocol.ts'
 import { adminDocument, adminScript, adminStyles } from './web.ts'
 import { EnterpriseDepartments, DepartmentRequestError, departmentIdSchema, departmentInputSchema } from './departments.ts'
+import { EnterpriseOidc, oidcSubjectSchema } from './oidc.ts'
 import type { EnterpriseUserId, Provisioning } from './protocol.ts'
 import {
   authorizationDocument,
@@ -27,7 +28,7 @@ const employeeInput = z
   .object({
     email: z.email(),
     name: z.string().min(1).max(256),
-    password: z.string().min(12).max(128),
+    password: z.string().min(12).max(128).optional(),
     role: z.enum(['admin', 'user']),
   })
   .strict()
@@ -39,6 +40,9 @@ const publicAuthPaths = new Set([
   '/api/auth/enterprise/desktop/authorize',
   '/api/auth/enterprise/desktop/approve',
   '/api/auth/enterprise/desktop/token',
+  '/api/auth/enterprise/desktop/cancel',
+  '/api/auth/sign-in/social',
+  '/api/auth/callback/enterprise-oidc',
 ])
 const modelPaths = new Set(['/v1/chat/completions', '/v1/responses', '/v1/messages'])
 // Provider override fields accepted by LiteLLM are deliberately absent: an employee cannot select another upstream or credential.
@@ -119,6 +123,7 @@ export class EnterpriseServer {
   private readonly auth: EnterpriseAuth
   readonly store: EnterpriseStore
   private readonly departments: EnterpriseDepartments
+  private readonly oidc: EnterpriseOidc
   private readonly gateway: LiteLlmGateway | undefined
   private readonly server: Server
   private readonly requests = new Set<Promise<void>>()
@@ -128,14 +133,15 @@ export class EnterpriseServer {
   /**
    * @param database - Owned deployment PostgreSQL pool.
    * @param config - Validated deployment settings.
-   * @param send - Gateway transport; production uses Fetch.
+   * @param send - Upstream transport; production uses Fetch.
    */
   constructor(
     private readonly database: Pool,
     readonly config: EnterpriseConfig,
     send: typeof fetch = fetch,
   ) {
-    this.auth = createEnterpriseAuth(database, config)
+    this.oidc = new EnterpriseOidc(database, config)
+    this.auth = createEnterpriseAuth(database, config, this.oidc)
     this.store = new EnterpriseStore(database, new EnterpriseSecrets(config.BETTER_AUTH_SECRET))
     this.departments = new EnterpriseDepartments(database)
     this.gateway = config.DSH_ENTERPRISE_MODE === 'managed' ? new LiteLlmGateway(config, send) : undefined
@@ -162,12 +168,17 @@ export class EnterpriseServer {
   /**
    * Migrate owned tables, create the first administrator when configured, verify LiteLLM, then listen.
    * @returns Assigned HTTP port, including the OS-assigned port when configured as zero.
+   * @throws If OIDC discovery names an issuer different from the configured issuer; the listener remains closed.
    */
   async start(): Promise<number> {
+    const authentication = await this.auth.$context
+    const provider = authentication.socialProviders.find(item => item.id === 'enterprise-oidc')
+    if (provider !== undefined && provider.issuer !== this.config.DSH_ENTERPRISE_OIDC_ISSUER) throw new Error('Enterprise OIDC discovery issuer does not match deployment settings')
     const migrations = await getMigrations(this.auth.options)
     await migrations.runMigrations()
     await this.store.migrate()
     await this.departments.migrate()
+    await this.oidc.migrate()
     if (
       this.gateway !== undefined &&
       (await this.store.hasBasicAssignments()) &&
@@ -231,12 +242,17 @@ export class EnterpriseServer {
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if ((request.method === 'POST' && request.url?.startsWith('/v1/admin/')) ||
+      ['/api/auth/enterprise/desktop/approve', '/api/auth/enterprise/desktop/token', '/api/auth/enterprise/desktop/cancel', '/api/auth/callback/enterprise-oidc'].includes(request.url?.split('?')[0] ?? '') ||
       (request.method === 'GET' && request.url?.split('?')[0] === '/v1/session')) {
-      const operation = this.administration.then(() => this.route(request, response))
-      // Each following operation re-reads authoritative account and assignment state after the predecessor settles.
-      this.administration = operation.catch((_error: unknown) => {})
-      await operation
+      await this.serialize(() => this.route(request, response))
     } else await this.route(request, response)
+  }
+
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.administration.then(operation)
+    // Each following operation re-reads authoritative account and assignment state after the predecessor settles.
+    this.administration = pending.then(() => {}, (_error: unknown) => {})
+    return pending
   }
 
   private async route(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -244,7 +260,7 @@ export class EnterpriseServer {
     if (request.method === 'GET' && ['/dsh/authorize', '/dsh/authorized', '/dsh/auth.js', '/dsh/auth.css', '/dsh/brand.png'].includes(authorizationUrl.pathname)) {
       const path = authorizationUrl.pathname
       const content = path === '/dsh/auth.js' ? authorizationScript : path === '/dsh/auth.css' ? authorizationStyles
-        : path === '/dsh/brand.png' ? authorizationBrandPng : authorizationDocument(this.config.DSH_ENTERPRISE_PRODUCT_NAME)
+        : path === '/dsh/brand.png' ? authorizationBrandPng : authorizationDocument(this.config.DSH_ENTERPRISE_PRODUCT_NAME, this.config.DSH_ENTERPRISE_OIDC_ENABLED ? this.config.DSH_ENTERPRISE_OIDC_DISPLAY_NAME : null, this.config.DSH_ENTERPRISE_PASSWORD_ENABLED)
       response.writeHead(200, { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
         'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
         'content-type': path.endsWith('.js') ? 'text/javascript; charset=utf-8' : path.endsWith('.css') ? 'text/css; charset=utf-8'
@@ -356,15 +372,20 @@ export class EnterpriseServer {
     if (url.pathname === '/v1/admin/employees' && request.method === 'GET') {
       const platformDefault = await this.store.platformDefault()
       const users = await this.database.query(
-        'SELECT u.id, u.name, u.email, u.role, u.banned, m.department_id AS "departmentId" FROM "user" u LEFT JOIN enterprise_department_member m ON m.user_id = u.id ORDER BY u."createdAt" DESC LIMIT 1000',
+        `SELECT u.id, u.name, u.email, u.role, u.banned, m.department_id AS "departmentId",
+          (SELECT a."accountId" FROM account a WHERE a."userId" = u.id AND a."providerId" = 'enterprise-oidc' LIMIT 1) AS "oidcAccountId"
+          FROM "user" u LEFT JOIN enterprise_department_member m ON m.user_id = u.id ORDER BY u."createdAt" DESC LIMIT 1000`,
       )
       const rows = await Promise.all(
-        users.rows.map(async (user: { id: string }) => {
+        users.rows.map(async (user: { id: string; oidcAccountId: string | null }) => {
+          const { oidcAccountId, ...account } = user
+          const identity = oidcAccountId === null ? null : z.tuple([z.string(), oidcSubjectSchema]).parse(JSON.parse(oidcAccountId))
           const assigned = await this.store.assignment(user.id)
           const inherited = assigned === null || assigned.uses_platform_default
           const configuration = inherited ? platformDefault : assigned.configuration
           return {
-            ...user,
+            ...account,
+            oidcIdentity: identity === null ? null : { issuer: identity[0], subject: identity[1] },
             assignment: configuration === null ? null : { ...configuration, apiKey: undefined },
             assignmentSource: inherited ? 'platform' : 'user',
             gatewayState: assigned?.gateway_state ?? 'unconfigured',
@@ -372,21 +393,24 @@ export class EnterpriseServer {
           }
         }),
       )
-      json(response, 200, { mode: this.config.DSH_ENTERPRISE_MODE, employees: rows, viewerId: employee.user.id })
+      json(response, 200, { mode: this.config.DSH_ENTERPRISE_MODE, employees: rows, viewerId: employee.user.id,
+        oidcIssuer: this.config.DSH_ENTERPRISE_OIDC_ENABLED ? this.config.DSH_ENTERPRISE_OIDC_ISSUER : null,
+        passwordEnabled: this.config.DSH_ENTERPRISE_PASSWORD_ENABLED })
       return
     }
     if (url.pathname === '/v1/admin/employees' && request.method === 'POST') {
       const input = employeeInput.parse(await body(request))
+      if ((input.role === 'admin' || !this.config.DSH_ENTERPRISE_OIDC_ENABLED || this.config.DSH_ENTERPRISE_PASSWORD_ENABLED) && input.password === undefined) throw new EnterpriseRequestError(400)
       const result = await this.auth.api.createUser({ headers: fromNodeHeaders(request.headers), body: input })
       json(response, 201, { user: result.user })
       return
     }
     const match =
-      /^\/v1\/admin\/employees\/([^/]+)\/(assignment|password|disable|retry-cleanup|role|budget|usage|department)$/u.exec(
+      /^\/v1\/admin\/employees\/([^/]+)\/(assignment|password|disable|retry-cleanup|role|budget|usage|department|oidc)$/u.exec(
         url.pathname,
       )
     if (match === null) throw new EnterpriseRequestError(404)
-    const userId = decodeURIComponent(match[1] ?? '')
+    const userId = z.string().min(1).transform(value => value as EnterpriseUserId).parse(decodeURIComponent(match[1] ?? ''))
     const action = match[2]
     const headers = fromNodeHeaders(request.headers)
     if (action === 'usage' && request.method === 'GET') {
@@ -400,7 +424,10 @@ export class EnterpriseServer {
       return
     }
     if (request.method !== 'POST') throw new EnterpriseRequestError(405)
-    if (action === 'department') {
+    if (action === 'oidc') {
+      const input = z.object({ subject: oidcSubjectSchema.nullable() }).strict().parse(await body(request))
+      await this.oidc.bind(userId, input.subject)
+    } else if (action === 'department') {
       const input = z.object({ departmentId: departmentIdSchema.nullable() }).strict().parse(await body(request))
       await this.departments.assign(userId as EnterpriseUserId, input.departmentId)
     } else if (action === 'assignment') {
@@ -410,6 +437,10 @@ export class EnterpriseServer {
       if (configuration === null) throw new EnterpriseRequestError(409)
       await this.assignConfiguration(userId, await this.approvedConfiguration(configuration), inherit)
     } else if (action === 'password') {
+      if (!this.config.DSH_ENTERPRISE_PASSWORD_ENABLED) {
+        const user = await this.database.query<{ role: string }>('SELECT role FROM "user" WHERE id = $1', [userId])
+        if (user.rows[0]?.role !== 'admin') throw new EnterpriseRequestError(409)
+      }
       const input = z
         .object({ password: z.string().min(12).max(128) })
         .strict()
@@ -432,10 +463,16 @@ export class EnterpriseServer {
       return
     } else if (action === 'role') {
       const input = z
-        .object({ role: z.enum(['admin', 'user']) })
+        .object({ role: z.enum(['admin', 'user']), password: z.string().min(12).max(128).optional() })
         .strict()
         .parse(await body(request))
       if (userId === employee.user.id) throw new EnterpriseRequestError(409)
+      if (input.role === 'admin') {
+        const credential = await this.database.query('SELECT id FROM account WHERE "userId" = $1 AND "providerId" = \'credential\' AND password IS NOT NULL', [userId])
+        if (input.password === undefined && credential.rowCount === 0) throw new EnterpriseRequestError(400)
+        if (input.password !== undefined) await this.auth.api.setUserPassword({ headers, body: { userId, newPassword: input.password } })
+      }
+      await this.oidc.bind(userId, null)
       await this.auth.api.setRole({ headers, body: { userId, role: input.role } })
     } else if (action === 'budget') {
       if (this.gateway === undefined) throw new EnterpriseRequestError(404)

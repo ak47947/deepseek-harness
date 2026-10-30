@@ -24,6 +24,7 @@ description: "运行和管理单企业账号与模型下发服务，配置企业
 
 - [运行服务](#run-the-service)
 - [管理员工和模型](#manage-employees-and-models)
+- [启用 OIDC 登录](#enable-oidc-sign-in)
 - [连接企业桌面端](#connect-enterprise-desktop)
 - [在本机使用 Docker](#run-locally-with-docker)
 - [部署与备份](#deploy-and-back-up)
@@ -50,6 +51,13 @@ description: "运行和管理单企业账号与模型下发服务，配置企业
 | `DSH_ENTERPRISE_MODE` | `basic` | `basic` 或 `managed`；精细化配置不完整时拒绝启动 |
 | `DSH_ENTERPRISE_SESSION_SECONDS` | `86400` | 登录硬有效期，范围为 60 至 2592000 秒 |
 | `DSH_ENTERPRISE_AUTHORIZATION_SECONDS` | `300` | 浏览器授权有效期，范围为 60 至 1800 秒 |
+| `DSH_ENTERPRISE_OIDC_ENABLED` | `0` | 设为 `1` 启用企业 OIDC 登录；要求 HTTPS 企业服务地址 |
+| `DSH_ENTERPRISE_OIDC_ISSUER` / `DSH_ENTERPRISE_OIDC_DISCOVERY_URL` | 未设置 | 精确的 HTTPS Issuer 及其发现文档地址 |
+| `DSH_ENTERPRISE_OIDC_CLIENT_ID` / `DSH_ENTERPRISE_OIDC_CLIENT_SECRET` | 未设置 | OIDC 应用凭证；启用 OIDC 时必须配置 |
+| `DSH_ENTERPRISE_OIDC_TOKEN_AUTH_METHOD` | `client_secret_basic` | Token 端点客户端认证方式；应用登记为表单认证时选择 `client_secret_post` |
+| `DSH_ENTERPRISE_OIDC_DISPLAY_NAME` | `Company SSO` | 桌面浏览器登录按钮显示的身份中心名称 |
+| `DSH_ENTERPRISE_OIDC_AUTO_PROVISION` | `0` | 首次登录自动创建普通员工；仅在 IdP 已将应用限定分配给获准员工后启用 |
+| `DSH_ENTERPRISE_PASSWORD_ENABLED` | `1` | 启用 OIDC 后可设为 `0`，隐藏员工密码字段并拒绝员工密码登录；管理员密码登录保留 |
 | `DSH_ENTERPRISE_LITELLM_URL` / `DSH_ENTERPRISE_LITELLM_KEY` | 未设置 | 私有网关地址和管理凭证，仅精细化模式使用 |
 | `DSH_ENTERPRISE_UPSTREAM_TIMEOUT_MS` | `300000` | 精细化模式模型请求的最长持续时间 |
 | `DSH_ENTERPRISE_DIRECT_KEYS_REVOKED_AT` | 未设置 | 迁移已有基础模式配置时，确认供应商凭证已撤销的 UTC 时间 |
@@ -68,6 +76,21 @@ description: "运行和管理单企业账号与模型下发服务，配置企业
 管理员可以重置密码、修改其他员工的角色和停用账号。重置密码会撤销登录会话。停用后，员工不能获取配置或发起新的精细化模型请求。基础模式会提示管理员需要单独撤销供应商凭证。精细化模式独立保存网关清理状态；撤销失败时持续展示并提供重试操作。系统拒绝管理员自行降权或停用自己。后台串行执行管理写入，在前序变更结束后重新检查操作人的管理员权限。
 
 精细化模式增加以美元计价的月额度，以及按员工、模型和 UTC 日期范围筛选、分页展示的网关用量。用量读取失败时展示暂不可用状态。月额度计数与筛选后的请求历史统计范围不同，实际支出以供应商账单为准。
+
+-----
+
+<a id="enable-oidc-sign-in"></a>
+## 启用 OIDC 登录
+
+在企业现有 IdP 注册 OIDC 应用，将 `<DSH_ENTERPRISE_ORIGIN>/api/auth/callback/enterprise-oidc` 登记为回调地址。在服务器私有环境文件中设置 `DSH_ENTERPRISE_OIDC_ENABLED=1`，并按上表配置 Issuer、发现地址、客户端 ID 和密钥，再使用相同 Compose 配置重建后台容器。启用 OIDC 要求完整配置及 HTTPS 企业服务地址；发现文档的 Issuer 与配置不一致时拒绝启动。微信、企业微信、飞书登录在上游 IdP 配置；后台使用 Better Auth Generic OAuth，不内嵌特定渠道登录组件。
+
+默认先在 `/admin` 创建员工，再打开成员操作菜单并选择“统一登录身份”。从 IdP 复制准确的 `sub`，核对显示的 Issuer 后保存。邮箱不会隐式关联账号。仅普通员工可使用 OIDC，管理员继续使用邮箱密码登录。关闭员工密码时，创建及密码重置操作省去员工密码；将无密码员工提升为管理员需要设置管理员密码，并清除其 OIDC 绑定和会话。
+
+启用首次登录自动开通前，先将 IdP 应用限定分配给获准员工，排除访客、公开自助注册及未经员工准入筛选的第三方身份，并验证未分配的身份被拒绝。随后设置 `DSH_ENTERPRISE_OIDC_AUTO_PROVISION=1`。新员工使用普通用户角色并继承平台默认模型；邮箱已被其他账号占用时拒绝登录，不合并账号。无法通过应用分配保证员工准入时，保持自动开通关闭，使用明确的员工绑定。
+
+OIDC 使用绑定浏览器的一次性状态、S256 PKCE、nonce 绑定、JWKS 验签及 Issuer、受众、有效期、授权方和已验证邮箱检查。身份记录同时编码 Issuer 与主体；更换 Issuer 不自动复用旧身份。后续登录保留稳定员工 ID、本地历史、部门和模型。保存或清除统一登录身份会撤销浏览器及桌面会话和未交换的桌面授权码，不删除员工数据；清除后需要管理员明确重新绑定。
+
+客户端密钥仅保留在服务器，上游访问令牌和 ID 令牌不持久化，也不下发桌面。OIDC 故障时，仅在启用员工密码登录的情况下保留密码入口。管理员必须在撤销 IdP 访问权限时另行停用 DSH 员工并撤销其会话；仅在 IdP 停用不会使既有 DSH 会话失效。联网桌面在下一次状态同步时停止，离线桌面在硬过期时停止；基础模式的供应商 Key 仍需单独撤销。HTTP 和浏览器测试使用本地签名的 OIDC 提供方；上线前需针对企业真实 IdP 验证 Issuer 配置、应用分配、可信 HTTPS 及实际回调。
 
 -----
 
