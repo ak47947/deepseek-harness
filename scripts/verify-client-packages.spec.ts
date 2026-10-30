@@ -192,19 +192,21 @@ describe('package modes', () => {
 })
 
 describe('module requests', () => {
-  it('rejects runtime requests from one client feature package to another dynamic row', () => {
-    const ui = declaration('ui', {
-      external: ['@deepseek-ai/dsh-client-slots/client'],
-      runtimeSourceUses: {
-        '@deepseek-ai/dsh-client-slots': ['packages/client/ui/src/client/index.ts'],
-      },
-    })
-    const slots = declaration('slots')
-    expect(collectClientPackageViolations(facts([], { declarations: [ui, slots] }))).toEqual([
-      ui.manifest + ': client feature package requests runtime external '
-      + '"@deepseek-ai/dsh-client-slots/client"; import shared types only or call an injected Cordis service',
-    ])
-  })
+  it.each(['packages/client/ui/package.json', 'enterprise/account/package.json'])(
+    'rejects runtime requests from feature %s to another dynamic row', (manifest) => {
+      const ui = { ...declaration('ui', {
+        external: ['@deepseek-ai/dsh-client-slots/client'],
+        runtimeSourceUses: {
+          '@deepseek-ai/dsh-client-slots': ['packages/client/ui/src/client/index.ts'],
+        },
+      }), manifest }
+      const slots = declaration('slots')
+      expect(collectClientPackageViolations(facts([], { declarations: [ui, slots] }))).toEqual([
+        ui.manifest + ': client feature package requests runtime external '
+        + '"@deepseek-ai/dsh-client-slots/client"; import shared types only or call an injected Cordis service',
+      ])
+    },
+  )
 
   it('rejects stale externals and accepts a runtime import outside client feature packages', () => {
     const gateway = {
@@ -454,7 +456,7 @@ describe('manifest declarations', () => {
     const root = mkdtempSync(join(tmpdir(), 'client-packages-'))
     roots.push(root)
     const files: Record<string, unknown> = {
-      'packages/g/a/package.json': {
+      'enterprise/account/package.json': {
         name: '@f/a', dsh: { client: { external: 'react', inject: ['@f/b', 1] } },
       },
       'packages/g/b/package.json': { name: '@f/b', dsh: { client: {} } },
@@ -467,8 +469,8 @@ describe('manifest declarations', () => {
     const result = readClientDeclarations(root)
     expect(result.declarations).toHaveLength(2)
     expect(result.malformed).toEqual([
-      'packages/g/a/package.json: @f/a dsh.client.external must be a string array',
-      'packages/g/a/package.json: @f/a dsh.client.inject must be a string array',
+      'enterprise/account/package.json: @f/a dsh.client.external must be a string array',
+      'enterprise/account/package.json: @f/a dsh.client.inject must be a string array',
     ])
   })
 

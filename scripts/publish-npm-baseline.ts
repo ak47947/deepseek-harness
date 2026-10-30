@@ -565,7 +565,6 @@ class BaselinePackager {
         '--filter', './vendor/**',
         '--filter', './packages/**',
         '--filter', './apps/**',
-        '--filter', './backend',
         '--recursive',
         'pack',
         '--pack-destination', artifactDirectory,

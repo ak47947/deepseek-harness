@@ -1,7 +1,6 @@
 /** Build one release target with matching Electron and dsh architecture. */
 
 import { spawn } from 'node:child_process'
-import { readDesktopConfiguration } from '../src/desktop-configuration.ts'
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { join, resolve } from 'node:path'
@@ -22,7 +21,7 @@ import { packagingErrorDetails, packagingStep } from './packaging-step.mjs'
 import { notarizeMacOS } from './notarize-macos.mjs'
 import { resolveMacOSNotarizationEnvironment } from './desktop-release-environment.mjs'
 import { DESKTOP_BUILD_VERSION_ENV, resolveDesktopBuildVersion, validateDesktopBuildVersion } from './desktop-build-version.mjs'
-import { resolveEnterprisePackageEnvironment } from './enterprise-package-environment.mjs'
+import { localEnterprisePackageEnvironment, resolveEnterprisePackageEnvironment } from '../../../enterprise/desktop/scripts/enterprise-package-environment.mjs'
 import { suggestDesktopBuildVersion } from './desktop-build-version-discovery.ts'
 import { desktopBuildCommitEnvironment, readDesktopBuildCommit, resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
@@ -352,11 +351,7 @@ async function main(): Promise<void> {
     : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
       unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
     })
-  if (environment.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined) {
-    const config = readDesktopConfiguration({ appRoot: APP_ROOT, development: true, environment })
-    environment.DSH_DESKTOP_ENTERPRISE_CONFIG = JSON.stringify(config)
-    environment.DSH_DESKTOP_APP_ID = config.appId
-  }
+  if (environment.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined) Object.assign(environment, localEnterprisePackageEnvironment(environment))
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   // Release settings come from the selected configuration files, so the version this run publishes is an
   // argument; the environment variable below only carries it to the child processes that build.

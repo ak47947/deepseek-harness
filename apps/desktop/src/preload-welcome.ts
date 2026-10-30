@@ -3,7 +3,7 @@ import type { AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-acc
 
 import { contextBridge, ipcRenderer } from 'electron'
 import { resolveDesktopLocale } from './locale.ts'
-import { enterpriseDesktopLocale } from './enterprise-branding.ts'
+import { enterpriseDesktopLocale } from '@deepseek-ai/dsh-enterprise-desktop-shell/branding'
 import { WELCOME_IPC, type WelcomeApi, type WelcomeNotice, type WelcomeSaveResult } from './welcome-api.ts'
 
 const prefix = '--dsh-welcome-locale='

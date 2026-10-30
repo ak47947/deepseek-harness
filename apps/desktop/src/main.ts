@@ -3,7 +3,6 @@ import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
 import { readFile, writeFile } from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -18,7 +17,6 @@ import {
   nativeTheme,
   protocol,
   session,
-  safeStorage,
   shell,
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
@@ -44,12 +42,11 @@ import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
 import { openWelcomeWindow } from './welcome-window.ts'
-import { WELCOME_IPC } from './welcome-api.ts'
+import { WELCOME_IPC, needsWelcome, type WelcomeNotice } from './welcome-api.ts'
 import { connectDesktopWelcome, type DesktopWelcomeBackend } from './welcome-backend.ts'
 import { DesktopUpdateJournal } from './update-journal.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 import { DesktopUpdateSchedule, resolveDesktopUpdateScheduleConfig } from './update-schedule.ts'
-import { desktopUpdateSupported } from './update-capability.ts'
 import { desktopUpdateErrorSummary, presentDesktopUpdate } from './update-presentation.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { readDesktopLoginShellEnvironment, resolveDesktopLoginShellConfig } from './login-shell-environment.ts'
@@ -66,41 +63,9 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
-import { readDesktopConfiguration } from './desktop-configuration.ts'
-import { enterpriseDesktopLocale } from './enterprise-branding.ts'
-import { DesktopEnterpriseSession } from './enterprise-session.ts'
-import {
-  prepareEnterpriseProfile, writeEnterpriseCredentials, resolveEnterpriseClientEntry,
-} from './enterprise-profile.ts'
-import { enterpriseSignInNotice, ENTERPRISE_IPC } from './enterprise-window.ts'
-import { EnterpriseBrowserSignIn } from './enterprise-browser-sign-in.ts'
-import { rotateEnterpriseModel } from './enterprise-rpc.ts'
+import { desktopProduct } from '@deepseek-ai/dsh-enterprise-desktop-shell'
 
-function readEnterpriseInput(): unknown {
-  if (app.isPackaged) {
-    try {
-      const manifest: unknown = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'))
-      return typeof manifest === 'object' && manifest !== null && 'dshEnterprise' in manifest ? manifest.dshEnterprise : undefined
-    } catch (error) {
-      console.error('Desktop enterprise: packaged manifest is unreadable', error)
-      return undefined
-    }
-  }
-  if (process.env.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined) return undefined
-  try {
-    return JSON.parse(process.env.DSH_DESKTOP_ENTERPRISE_CONFIG)
-  } catch (error) {
-    console.error('Desktop enterprise: DSH_DESKTOP_ENTERPRISE_CONFIG is not valid JSON', error)
-    return undefined
-  }
-}
-const enterpriseConfig = readDesktopConfiguration({
-  appRoot: app.getAppPath(), development: !app.isPackaged,
-  dataRoot: join(app.getPath('appData'), 'com.atrix.desktop'), packaged: app.isPackaged ? readEnterpriseInput() : undefined,
-})
-app.setName(enterpriseConfig.productName)
-app.setPath('userData', (!app.isPackaged ? process.env.DSH_DESKTOP_USER_DATA_DIR : undefined)
-  ?? join(app.getPath('appData'), enterpriseConfig.appId))
+const product = desktopProduct()
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
@@ -125,7 +90,7 @@ const rendererConsole = new RendererConsoleTail()
 app.setAppLogsPath()
 
 function currentDesktopLocale(): ReturnType<typeof resolveDesktopLocale> {
-  return enterpriseDesktopLocale(resolveDesktopLocale(windowsLanguage ?? app.getLocale()), enterpriseConfig.productName)
+  return product.localize(resolveDesktopLocale(windowsLanguage ?? app.getLocale()))
 }
 /** Quit without the task confirmation; the caller has already decided the application must stop. */
 function quitWithoutConfirmation(): void {
@@ -222,6 +187,12 @@ function developmentHostInspectPort(enabled: boolean): number | undefined {
   return port
 }
 
+function platformLoginUrl(authorizeUrl: string): string {
+  const url = new URL(authorizeUrl)
+  url.searchParams.set('theme', nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+  return url.href
+}
+
 /**
  * Opaque chrome fallback matching the built-in sidebar palette (the resolved
  * `--dsw-static-neutral-bluish-900` / `-50` tokens). An approximation for
@@ -259,6 +230,7 @@ function createWindow(preload: string, show = false, primary = false, browserSes
     webPreferences: {
       ...(browserSession === undefined ? {} : { session: browserSession }),
       preload,
+      additionalArguments: product.rendererArguments,
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -345,140 +317,38 @@ function createWindow(preload: string, show = false, primary = false, browserSes
 
 async function main(): Promise<void> {
   let workspaceWindowCreated = false
-  let enterpriseTransition = false
-  // Authentication can close the only window before the workspace is created.
+  let productTransition = false
   app.on('window-all-closed', () => {
-    if (workspaceWindowCreated && !enterpriseTransition && process.platform !== 'darwin') app.quit()
+    if (workspaceWindowCreated && !productTransition && process.platform !== 'darwin') app.quit()
   })
-  let accountBrowser: Session | undefined = undefined
   let welcomeWindow: BrowserWindow | undefined
-  let stopEnterpriseHost = async (): Promise<void> => {}
-  let updateEnterpriseModel: ((value: NonNullable<DesktopEnterpriseSession['session']>) => Promise<void>) | undefined
-  let enterpriseDegraded = false
-  let publishEnterpriseAccount = (): void => {}
-  const enterprise: DesktopEnterpriseSession = new DesktopEnterpriseSession(join(app.getPath('userData'), 'enterprise'), enterpriseConfig, {
-    encrypt: (value) => {
-      if (!safeStorage.isEncryptionAvailable()) throw new Error('Enterprise desktop: secure credential storage is unavailable')
-      return safeStorage.encryptString(value)
-    },
-    decrypt: value => safeStorage.decryptString(value),
-    degraded: (value) => { enterpriseDegraded = value; publishEnterpriseAccount() },
+  let mainWindow: BrowserWindow | undefined
+  let stopProductHost = async (): Promise<void> => {}
+  const customization = product.createAdapter({
+    openWelcome: operations => openWelcomeWindow(currentDesktopLocale(), operations),
+    welcomeWindow: () => welcomeWindow,
+    setWelcomeWindow: (window) => { welcomeWindow = window },
+    focusHandler: () => focusPrimaryWindow,
+    setFocusHandler: (focus) => { focusPrimaryWindow = focus },
+    isStopping: () => shuttingDown,
+    stopHost: () => stopProductHost(),
+    runtimeDirectory: () => runtimeResources().dsh,
+    prepareRelease: home => new DesktopProjectManager(resolveDesktopPaths(home), runtimeResources()).applyRelease(),
+    publishAccount: (channel) => { if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel) },
     failure: (error) => { reportFatal(error, 'main') },
-    update: (value) => {
-      if (updateEnterpriseModel === undefined) return Promise.reject(new Error('Enterprise desktop: Host is unavailable during model synchronization'))
-      return updateEnterpriseModel(value)
-    },
-    invalidate: async (reason, updating, clearSaved) => {
-      await stopEnterpriseHost()
-      await updating?.catch(() => undefined)
-      const paths = enterprise.paths
-      const results = await Promise.allSettled([clearSaved, paths === undefined ? undefined : writeEnterpriseCredentials(paths.home, {}),
-        accountBrowser?.clearStorageData(), accountBrowser?.clearCache()])
-      const failure = results.find(result => result.status === 'rejected')
-      if (failure?.status === 'rejected') throw new Error('Enterprise desktop: work stopped, but sign-out cleanup failed; retry after checking local storage', { cause: failure.reason })
-      if (shuttingDown) return
-      if (reason !== 'signed-out') await dialog.showMessageBox({ type: 'info', title: enterpriseConfig.productName,
-        message: enterpriseSignInNotice(app.getLocale(), reason) })
-      app.relaunch()
-      quitWithoutConfirmation()
-    },
+    quit: () => { shuttingDown = true; quitWithoutConfirmation() },
   })
-  let choosingEnterpriseWorkspace = true
-  let restartAfterAuthorization = false
-  const selectedEnterpriseWorkspace = Promise.withResolvers<undefined>()
-  const enterpriseProfileCommitted = Promise.withResolvers<undefined>()
-  const enterpriseAuthorization = new EnterpriseBrowserSignIn(enterprise.config, async (token) => {
-    const authenticated = await enterprise.acceptBrowserToken(token)
-    try {
-      if (choosingEnterpriseWorkspace) {
-        selectedEnterpriseWorkspace.resolve(undefined)
-        await enterpriseProfileCommitted.promise
-      } else {
-        const accountPaths = enterprise.paths
-        if (accountPaths === undefined) throw new Error('Enterprise desktop: authenticated account is unavailable')
-        const accountManager = new DesktopProjectManager(resolveDesktopPaths(accountPaths.home), runtimeResources())
-        await enterprise.prepareAndCommit(async () => {
-          await accountManager.applyRelease()
-          const runtime = runtimeResources().dsh
-          await prepareEnterpriseProfile(accountPaths, authenticated,
-            resolveEnterpriseClientEntry(runtime), enterpriseConfig.productName)
-        })
-        restartAfterAuthorization = true
-      }
-    } catch (error) {
-      reportFatal(error, 'main')
-      throw error
-    }
-  }, () => {
-    if (restartAfterAuthorization && !shuttingDown) {
-      try { app.relaunch(); quitWithoutConfirmation() } catch (error) { reportFatal(error, 'main') }
-    }
-  }, url => shell.openExternal(url))
-  const openEnterpriseWelcome = async (): Promise<BrowserWindow> => {
-    const previousFocus = focusPrimaryWindow
-    const window = await openWelcomeWindow(enterpriseDesktopLocale(resolveDesktopLocale(app.getLocale()), enterpriseConfig.productName), {
-      enterprise: true, analyticsEnabled: () => Promise.resolve(false), takeNotice: () => Promise.resolve(undefined),
-      startSignIn: () => enterpriseAuthorization.start(nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
-      cancelSignIn: id => enterpriseAuthorization.cancel(id),
-      copySignInLink: async (id) => {
-        const attempt = enterpriseAuthorization.view().attempt
-        if (attempt?.id !== id || attempt.authorizeUrl === undefined) throw new Error('Enterprise desktop: authorization link is unavailable')
-        await clipboard.writeText(attempt.authorizeUrl)
-      },
-      saveApiKey: () => Promise.resolve({ ok: false }),
-      skip: () => Promise.reject(new Error('Enterprise desktop: sign in before opening a workspace')),
-    })
-    window.once('closed', () => {
-      if (welcomeWindow === window) welcomeWindow = undefined
-      if (focusPrimaryWindow === focusWelcome) focusPrimaryWindow = previousFocus
-      if (choosingEnterpriseWorkspace) {
-        shuttingDown = true
-        selectedEnterpriseWorkspace.resolve(undefined)
-        enterpriseProfileCommitted.resolve(undefined)
-        app.quit()
-      } else {
-        const attempt = enterpriseAuthorization.view().attempt
-        if (attempt !== null && ['initializing', 'waiting-browser', 'exchanging'].includes(attempt.phase)) {
-          void enterpriseAuthorization.cancel(attempt.id).catch((error: unknown) => { console.error(error) })
-        }
-      }
-    })
-    const focusWelcome = () => { if (!window.isDestroyed()) { window.show(); window.focus() } }
-    focusPrimaryWindow = focusWelcome
-    return window
-  }
-  {
-    const off = enterpriseAuthorization.subscribe((view) => {
-      if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, view)
-      publishEnterpriseAccount()
-    })
-    app.on('will-quit', () => {
-      off()
-      enterpriseProfileCommitted.resolve(undefined)
-      void enterpriseAuthorization.dispose().catch((error: unknown) => { console.error(error) })
-    })
-  }
-  if (!await enterprise.restore()) {
-    welcomeWindow = await openEnterpriseWelcome()
-    await selectedEnterpriseWorkspace.promise
-    if (shuttingDown) return
-  }
-  choosingEnterpriseWorkspace = false
-  const startupEnterpriseSession = enterprise.session
-  const startupEnterprisePaths = enterprise.paths
-  if (startupEnterprisePaths === undefined || startupEnterpriseSession === undefined || !enterprise.authorized) {
-    throw new Error('Enterprise desktop: sign in before opening a workspace')
-  }
-  accountBrowser = session.fromPartition(`persist:dsh-enterprise-${startupEnterprisePaths.key}`)
-  const browserSession = accountBrowser
+  stopForRecovery = () => customization?.dispose() ?? Promise.resolve()
+  if (customization !== undefined && !await customization.initialize()) return
+  const browserSession = customization?.browserSession ?? session.defaultSession
   const desktopSettings = readDesktopSettings(app.getPath('userData'))
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
   const updateJournal = journalDirectory === undefined ? undefined : new DesktopUpdateJournal(journalDirectory, app.getVersion())
   const resources = runtimeResources()
-  const paths = resolveDesktopPaths(startupEnterprisePaths.home)
+  const paths = resolveDesktopPaths(customization?.home)
   const development = !app.isPackaged
-  const updatesSupported = desktopUpdateSupported(process.platform, app.isPackaged, process.resourcesPath)
+  const updatesSupported = product.supportsUpdates(process.platform, app.isPackaged, process.resourcesPath)
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
     : join(process.resourcesPath, 'runtime', 'primary-runtime')
@@ -498,26 +368,16 @@ async function main(): Promise<void> {
   let hostEnvironment: NodeJS.ProcessEnv = process.env
   const prepareHostEnvironment = async (): Promise<void> => {
     hostEnvironment = await loginShell
-    if (!enterprise.authorized) throw new Error('Enterprise desktop: account authorization expired before Host startup')
-    hostEnvironment = { ...hostEnvironment, DSH_HOME: startupEnterprisePaths.home }
+    customization?.assertAuthorized()
+    if (customization !== undefined) hostEnvironment = { ...hostEnvironment, DSH_HOME: customization.home }
   }
   const prepareDesktopHost = async (): Promise<void> => {
     await Promise.all([manager.applyRelease(), prepareHostEnvironment()])
-    if (!enterprise.authorized) {
-      throw new Error('Enterprise desktop: account authorization is unavailable')
-    }
-    const clientEntry = resolveEnterpriseClientEntry(resources.dsh)
-    await enterprise.prepareAndCommit(() =>
-      prepareEnterpriseProfile(startupEnterprisePaths, startupEnterpriseSession, clientEntry, enterpriseConfig.productName))
-    enterpriseProfileCommitted.resolve(undefined)
+    await customization?.prepareHost()
   }
   let quitting = false
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
-  let mainWindow: BrowserWindow | undefined
-  publishEnterpriseAccount = () => {
-    if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.webContents.send('dsh-enterprise:changed')
-  }
   const installFileDrag = (): (() => Promise<void>) => installDesktopFileDrag(
     event => assertProductSender(event),
     (address, signal) => {
@@ -546,7 +406,7 @@ async function main(): Promise<void> {
   let updateStopFailure: DesktopHostUncleanExitError | undefined
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const systemLanguages = app.getPreferredSystemLanguages()
-  let locale = enterpriseDesktopLocale(resolveDesktopStartupLocale(null, systemLanguages), enterpriseConfig.productName)
+  let locale = product.localize(resolveDesktopStartupLocale(null, systemLanguages))
   windowsLanguage = locale.id
   let mandatoryPolicy: DesktopMandatoryUpdatePolicy | undefined
   let mandatoryUI: DesktopMandatoryUpdateWindow | undefined
@@ -606,6 +466,11 @@ async function main(): Promise<void> {
       if (analyticsEnabled) await welcomeBackend?.report(event)
     } catch (_error) { /* Analytics cannot interrupt native actions. */ }
   }
+  let stopAccount: (() => void) | undefined
+  let openedAttempt: string | undefined
+  let returnedAttempt: string | undefined
+  let pendingWelcomeNotice: WelcomeNotice | undefined
+  let previousAccountStatus: string | undefined
   const assertProductSender = (event: IpcMainInvokeEvent): BrowserWindow => {
     assertDesktopSender(event, ['app'])
     if (mainWindow === undefined || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents
@@ -647,16 +512,54 @@ async function main(): Promise<void> {
         injections = ready.injections
         welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => browserSession.fetch(input, init),
           async () => (await browserSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
-        if (!enterprise.authorized) { await host.stop(); throw new Error('Enterprise desktop: account expired during Host startup') }
-        updateEnterpriseModel = value => rotateEnterpriseModel(ready.url,
-          (input, init) => browserSession.fetch(input instanceof URL ? input.href : input, init), value, () => enterprise.authorized)
-        enterprise.startSynchronization()
+        await customization?.hostStarted(ready.url, () => host.stop())
         analyticsEnabled = await welcomeBackend.analyticsEnabled().catch(() => false)
         if (!reportedLaunch) { reportedLaunch = true; void track('desktop_app_launch', {}) }
+        if (customization === undefined) {
+          stopAccount?.()
+          const accountBackend = welcomeBackend.account
+          stopAccount = accountBackend.watch((state) => {
+            if (quitting) return
+            if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
+            const attempt = state.attempt
+            if (attempt?.phase === 'waiting-browser' && attempt.authorizeUrl !== undefined && openedAttempt !== attempt.id) {
+              openedAttempt = attempt.id
+              void shell.openExternal(platformLoginUrl(attempt.authorizeUrl)).catch(() => undefined)
+            }
+            if ((attempt?.phase === 'failed' || attempt?.phase === 'expired') && returnedAttempt !== attempt.id) {
+              returnedAttempt = attempt.id
+              focusPrimaryWindow()
+            }
+            if (state.status === 'credential-stored' && attempt?.phase === 'succeeded' && welcomeWindow !== undefined) void enterWorkspace({ activate: false }).catch(() => undefined)
+            if (previousAccountStatus === 'credential-stored' && state.status === 'signed-out') {
+              void readWelcomeState().then(async (value) => {
+                if (needsWelcome(value) && !quitting) {
+                  enteredWorkspace = false
+                  await showWelcome()
+                  if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
+                }
+                return undefined
+              }).catch(() => undefined)
+            }
+            previousAccountStatus = state.status
+          }, () => {
+          // The stream reconnects; a transport failure does not change account state.
+          }, () => {
+            void readWelcomeState().then(async (value) => {
+              if (!needsWelcome(value) || quitting) return
+              pendingWelcomeNotice = 'session-expired'
+              enteredWorkspace = false
+              await showWelcome()
+              const state = await accountBackend.state()
+              if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
+            }).catch(() => undefined)
+          }, (enabled) => { analyticsEnabled = enabled })
+        }
 
       },
       stop: async () => {
-        updateEnterpriseModel = undefined
+        customization?.hostStopped()
+        stopAccount?.()
         analyticsEnabled = false
         try { await host.stop(requireCleanStop) }
         catch (error) {
@@ -726,15 +629,11 @@ async function main(): Promise<void> {
 
   const readWelcomeState = async () => {
     if (backend.host === undefined || welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
-    return {
-      loggedIn: true,
-      hasApiKey: true,
-      writable: false,
-      localePreference: await welcomeBackend.readLocalePreference(),
-    }
+    const current = welcomeBackend
+    return customization === undefined ? current.read() : customization.welcomeState(() => current.readLocalePreference())
   }
-  stopEnterpriseHost = async () => {
-    enterpriseTransition = true
+  stopProductHost = async () => {
+    productTransition = true
     mainWindow?.hide()
     mainWindow?.destroy()
     requireCleanStop = true
@@ -746,8 +645,7 @@ async function main(): Promise<void> {
     } finally { requireCleanStop = false }
   }
   stopForRecovery = async () => {
-    enterpriseProfileCommitted.resolve(undefined)
-    await Promise.all([enterpriseAuthorization.dispose(), enterprise.dispose(), backend.close()])
+    await Promise.all([customization?.dispose(), backend.close()])
   }
 
   const reconcileBackend = (): Promise<void> => {
@@ -948,7 +846,7 @@ async function main(): Promise<void> {
     const window = mainWindow
     if (window === undefined || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame
       || typeof next !== 'string') return
-    const current = enterpriseDesktopLocale(resolveDesktopStartupLocale(next, systemLanguages), enterpriseConfig.productName)
+    const current = product.localize(resolveDesktopStartupLocale(next, systemLanguages))
     if (current.id === locale.id) return
     locale = current
     platformView.notifyLocaleChanged()
@@ -963,33 +861,7 @@ async function main(): Promise<void> {
     assertProductSender(event)
     return readDeviceInfo()
   })
-  ipcMain.handle(ENTERPRISE_IPC.organization, (event) => {
-    assertProductSender(event)
-    return enterpriseConfig.enterpriseName
-  })
-  ipcMain.handle(ENTERPRISE_IPC.account, (event) => {
-    assertProductSender(event)
-    const account = enterprise.session
-    return account === undefined ? null : {
-      organization: enterprise.config.enterpriseName, name: account.name, email: account.email,
-      mode: account.provisioning.mode, expiresAt: account.expiresAt, degraded: enterpriseDegraded,
-    }
-  })
-  ipcMain.handle(ENTERPRISE_IPC.signOut, async (event) => {
-    assertProductSender(event)
-    if (await quitConfirmation.confirm()) await enterprise.signOut()
-  })
-  ipcMain.handle('dsh-enterprise:start', async (event) => {
-    assertProductSender(event)
-    if (welcomeWindow === undefined || welcomeWindow.isDestroyed()) welcomeWindow = await openEnterpriseWelcome()
-    return enterpriseAuthorization.start(nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
-  })
-  ipcMain.handle('dsh-enterprise:state', (event) => { assertProductSender(event); return enterpriseAuthorization.view() })
-  ipcMain.handle('dsh-enterprise:cancel', (event, id: unknown) => {
-    assertProductSender(event)
-    if (typeof id !== 'string') throw new Error('Enterprise desktop: invalid sign-in attempt')
-    return enterpriseAuthorization.cancel(id as import('@deepseek-ai/dsh-deepseek-account/types').SignInAttemptId)
-  })
+  customization?.bindApplication(assertProductSender, () => quitConfirmation.confirm())
   ipcMain.handle(DESKTOP_IPC.onboardingApiKey, async (event) => {
     assertProductSender(event)
     return (await readWelcomeState()).hasApiKey
@@ -1144,10 +1016,10 @@ async function main(): Promise<void> {
     updates.dispose()
   })
 
-  const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'enterprise', 'icon-windows.png')
+  const applicationIconPath = development ? join(product.resourceRoot, 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
-    applicationName: enterpriseConfig.productName,
+    applicationName: product.productName,
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
@@ -1204,7 +1076,7 @@ async function main(): Promise<void> {
     tray?.relabel()
   }
   refreshApplicationMenu()
-  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'enterprise', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
+  const trayIconPath = development ? join(product.resourceRoot, 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
   if (process.platform === 'win32') {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
     try {
@@ -1290,7 +1162,7 @@ async function main(): Promise<void> {
     mainWindow = window
     window.on('page-title-updated', (event) => {
       event.preventDefault()
-      window.setTitle(enterpriseConfig.productName)
+      window.setTitle(product.productName)
     })
     browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name))
     shortcuts.attach(window)
@@ -1359,24 +1231,85 @@ async function main(): Promise<void> {
       window.webContents.openDevTools({ mode: 'detach' })
     }
   }
+  let openingWelcome: Promise<void> | undefined
   const showWelcome = async (): Promise<void> => {
     if (quitting) return
-    if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) {
-      welcomeWindow.show()
-      welcomeWindow.focus()
+    if (customization !== undefined) {
+      if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) { welcomeWindow.show(); welcomeWindow.focus(); return }
+      welcomeWindow = await customization.openWelcome()
+      mainWindow?.hide()
       return
     }
-    welcomeWindow = await openEnterpriseWelcome()
-    mainWindow?.hide()
+    if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) {
+      if (!welcomeWindow.isVisible()) void track('auth_page_view', {})
+      welcomeWindow.show()
+      welcomeWindow.focus()
+      return Promise.resolve()
+    }
+    openingWelcome ??= (async () => {
+      welcomeWindow = await openWelcomeWindow(locale, {
+        analytics: track,
+        analyticsEnabled: () => Promise.resolve(analyticsEnabled),
+        takeNotice: () => {
+          const notice = pendingWelcomeNotice
+          pendingWelcomeNotice = undefined
+          return Promise.resolve(notice)
+        },
+        startSignIn: async () => {
+          if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
+          return welcomeBackend.account.start(desktopClientMetadata(locale.id))
+        },
+        cancelSignIn: async (id) => {
+          if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
+          return welcomeBackend.account.cancel(id)
+        },
+        copySignInLink: async (id) => {
+          const state = await welcomeBackend?.account.state()
+          if (state?.attempt?.id !== id || state.attempt.phase !== 'waiting-browser' || state.attempt.authorizeUrl === undefined) {
+            throw new Error('desktop welcome: login link is unavailable')
+          }
+          await clipboard.writeText(platformLoginUrl(state.attempt.authorizeUrl))
+        },
+        saveApiKey: async (apiKey) => {
+          if (backend.host === undefined || welcomeBackend === undefined) return { ok: false }
+          const saved = await welcomeBackend.save(apiKey)
+          if (!saved.ok) return saved
+          await enterWorkspace()
+          return { ok: true }
+        },
+        skip: enterWorkspace,
+      })
+      const window = welcomeWindow
+      window.once('closed', () => {
+        void welcomeBackend?.account.state().then((state) => {
+          if (state.attempt !== null && !enteredWorkspace) return welcomeBackend?.account.cancel(state.attempt.id)
+          return undefined
+        }).catch(() => undefined)
+      })
+      window.once('closed', () => {
+        if (welcomeWindow === window) welcomeWindow = undefined
+        if (enteredWorkspace || recovery.active) return
+        // Nothing runs before the workspace opens. macOS keeps the Dock convention and drops the
+        // unused main window so the next activation rebuilds the welcome; elsewhere the close quits.
+        if (process.platform === 'darwin') mainWindow?.destroy()
+        else app.quit()
+      })
+      if (isQuitting() || recovery.active || enteredWorkspace) window.close()
+      else mainWindow?.hide()
+    })().finally(() => { openingWelcome = undefined })
+    return openingWelcome
   }
   const openInitialWindow = async (): Promise<void> => {
     if (quitting || recovery.active) return
     const state = await readWelcomeState()
     if (isQuitting() || backend.state.phase !== 'ready') return
-    locale = enterpriseDesktopLocale(resolveDesktopStartupLocale(state.localePreference, systemLanguages), enterpriseConfig.productName)
+    locale = product.localize(resolveDesktopStartupLocale(state.localePreference, systemLanguages))
     windowsLanguage = locale.id
     refreshApplicationMenu()
-    await enterWorkspace()
+    if (!enteredWorkspace && needsWelcome(state)) {
+      raiseAfterUpdate = false
+      await showWelcome()
+    } else await enterWorkspace()
   }
   focusPrimaryWindow = () => {
     if (quitting) return
@@ -1407,11 +1340,12 @@ async function main(): Promise<void> {
   const finishQuit = (): void => {
     quitting = true
     shuttingDown = true
-    enterpriseProfileCommitted.resolve(undefined)
+    customization?.releaseStartup()
     updateJournal?.action('quit-requested')
     quitConfirmation.dispose()
     backgroundNotice?.dispose()
     tray?.dispose()
+    stopAccount?.()
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide()
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.hide()
     updateSchedule.dispose()
@@ -1419,7 +1353,7 @@ async function main(): Promise<void> {
     mandatoryUI?.dispose()
     void Promise.all([
       Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()),
-      backend.close(), enterpriseAuthorization.dispose(), enterprise.dispose(),
+      backend.close(), customization?.dispose(),
       // A Platform cleanup failure is logged without cutting the remaining Host shutdown short.
       platformView.dispose().catch((error: unknown) => { console.error(error) }),
       disposeFileDrag().catch((error: unknown) => { console.error(error) })])
@@ -1493,9 +1427,6 @@ async function main(): Promise<void> {
     }).catch((error: unknown) => { console.error(error) })
   }
   automaticCheck()
-  const syncEnterprise = (): void => { void enterprise.synchronize().catch((error: unknown) => { reportFatal(error, 'main') }) }
-  powerMonitor.on('resume', syncEnterprise)
-  app.on('will-quit', () => { powerMonitor.off('resume', syncEnterprise) })
   await reconcileBackend().catch(() => undefined)
   // Window lifecycle callbacks run while backend startup is pending.
   if (isQuitting()) return

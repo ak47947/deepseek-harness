@@ -26,7 +26,7 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 pnpm run dev:desktop
 ```
 
-应用打开企业登录页，企业名与产品名默认为 `Atrix Harness`，服务地址默认为 `http://127.0.0.1:3090`。连接其他企业服务时编辑[桌面配置](apps/desktop/config/desktop.json)。独立 Web 启动方式已停用。
+应用打开企业登录页，企业名与产品名默认为 `Atrix Harness`，服务地址默认为 `http://127.0.0.1:3090`。连接其他企业服务时编辑[桌面配置](enterprise/desktop/config/desktop.json)。上游 Desktop 入口为 `pnpm run dev:desktop:upstream`；独立 Web 启动方式仍然可用。
 
 <a id="run-from-source"></a>
 

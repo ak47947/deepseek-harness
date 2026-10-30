@@ -1,5 +1,8 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { clientSourceRoot, findUiI18nViolations } from './verify-client-ui-i18n.ts'
+import { clientSourceRoot, clientUiSourceFiles, findUiI18nViolations } from './verify-client-ui-i18n.ts'
 
 function messages(source: string): string[] {
   return findUiI18nViolations('packages/client/ui-example/src/client/View.tsx', source)
@@ -7,6 +10,24 @@ function messages(source: string): string[] {
 }
 
 describe('Client UI i18n source check', () => {
+  it('includes enterprise Client components and their companion copy', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-enterprise-client-i18n-'))
+    try {
+      const directory = join(root, 'enterprise/account/src/client')
+      mkdirSync(directory, { recursive: true })
+      writeFileSync(join(directory, 'View.tsx'), 'export const View = () => <div aria-label="Account" />\n')
+      writeFileSync(join(directory, 'actions.ts'), "export const TABS = [{ label: 'Sign out' }]\n")
+      const files = clientUiSourceFiles(root)
+      expect(files).toEqual([
+        'enterprise/account/src/client/actions.ts', 'enterprise/account/src/client/View.tsx',
+      ].sort())
+      expect(files.flatMap(file => findUiI18nViolations(file, readFileSync(join(root, file), 'utf8')))
+        .map(row => row.text)).toEqual(['Account', 'Sign out'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects direct JSX copy and copy-bearing attributes', () => {
     expect(messages(`
       const View = ({ ready }: { ready: boolean }) => <section aria-label="Overview">

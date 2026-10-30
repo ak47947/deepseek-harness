@@ -56,6 +56,8 @@ const EXECUTABLE_SOURCE_ALLOWLIST = new Map<string, string>([
 const ROOT_LAUNCHER_POLICIES = new Map<string, LauncherPolicy>([
   ['demo:ptc', { kind: 'dsh-wrapper', wrapper: 'scripts/demo-ptc.mjs' }],
   ['demo:inspector', { kind: 'dsh-direct' }],
+  ['start:web', { kind: 'dsh-direct' }],
+  ['dev:web', { kind: 'dsh-wrapper', wrapper: 'scripts/dev-web.ts' }],
 ])
 
 const SOURCE_PATTERNS = [
@@ -67,10 +69,10 @@ const SOURCE_PATTERNS = [
   'apps/**/*.js',
   'apps/**/*.mjs',
   'apps/**/*.cjs',
-  'backend/**/*.ts',
-  'backend/**/*.js',
-  'backend/**/*.mjs',
-  'backend/**/*.cjs',
+  'enterprise/**/*.ts',
+  'enterprise/**/*.js',
+  'enterprise/**/*.mjs',
+  'enterprise/**/*.cjs',
   'packages/**/*.ts',
   'packages/**/*.js',
   'packages/**/*.mjs',
@@ -101,7 +103,7 @@ function normalizedBin(value: unknown): string | undefined {
 
 function manifestBinViolations(root: string): string[] {
   const failures: string[] = []
-  const manifests = globSync(['apps/*/package.json', 'backend/package.json', 'packages/*/*/package.json'], { cwd: root }).sort()
+  const manifests = globSync(['apps/*/package.json', 'enterprise/*/package.json', 'packages/*/*/package.json'], { cwd: root }).sort()
   for (const rawPath of manifests) {
     const path = repositoryPath(rawPath)
     const manifest = JSON.parse(readFileSync(resolve(root, path), 'utf8')) as PackageManifest
@@ -145,10 +147,6 @@ function rootLauncherViolations(root: string): string[] {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as RootManifest
   const failures: string[] = []
   for (const [name, commandValue] of Object.entries(manifest.scripts ?? {}).sort(([left], [right]) => left.localeCompare(right))) {
-    if (name === 'start:web' || name === 'dev:web') {
-      failures.push(`package.json scripts.${name}: standalone Web launchers are disabled; use enterprise Desktop`)
-      continue
-    }
     const policy = ROOT_LAUNCHER_POLICIES.get(name)
     if (policy === undefined) {
       if (name.startsWith('demo:')) {

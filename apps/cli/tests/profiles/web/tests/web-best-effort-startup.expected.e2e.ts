@@ -10,7 +10,7 @@ import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
 
 const repoRoot = fileURLToPath(new URL('../../../../../../', import.meta.url))
-const dshBin = join(repoRoot, 'apps/web/tests/fixtures/desktop-renderer-host.mjs')
+const dshBin = join(repoRoot, 'apps/cli/lib/bin.js')
 const frontendIndex = join(repoRoot, 'apps/web/dist/index.html')
 const builtArtifactsExist = existsSync(dshBin) && existsSync(frontendIndex)
 

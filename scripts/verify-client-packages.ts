@@ -16,9 +16,8 @@ import {
 import { TypeScriptProject } from './ts-project.ts'
 
 const GATE = 'verify-client-packages'
-const CLIENT_MANIFEST_GLOB = 'packages/client/*/package.json'
-const MANIFEST_GLOBS = ['packages/*/*/package.json', 'apps/*/package.json', 'backend/package.json', 'vendor/*/package.json']
-const CONFIG_GLOB = 'packages/*/*/tsdown.config.ts'
+const MANIFEST_GLOBS = ['packages/*/*/package.json', 'enterprise/*/package.json', 'apps/*/package.json', 'vendor/*/package.json']
+const CONFIG_GLOBS = ['packages/*/*/tsdown.config.ts', 'enterprise/*/tsdown.config.ts']
 const PLATFORM_SOURCE = 'packages/client/web/src/platform.ts'
 const PARSER_PRELOAD_SOURCE = 'packages/client/modules/src/index.ts'
 const STATIC_PRESET_SOURCE = 'packages/client/tsdown.client.ts'
@@ -57,7 +56,7 @@ export interface ClientDeclaration {
   readonly assetReferences: readonly AssetReference[]
 }
 
-/** One package directly under packages/client. */
+/** One client feature or shared browser package. */
 export interface ClientPackage extends ClientDeclaration {
   readonly staticLinked: boolean
   readonly sourceUses: Readonly<Record<string, readonly string[]>>
@@ -470,7 +469,7 @@ function collectModuleViolations(facts: ClientPackageFacts): string[] {
       if (supplier === pkg.name) {
         violations.push(pkg.manifest + ': dsh.client.external names its own row ' + JSON.stringify(specifier))
       } else if (supplier !== undefined) {
-        if (pkg.manifest.startsWith('packages/client/')) {
+        if (pkg.manifest.startsWith('packages/client/') || pkg.manifest.startsWith('enterprise/')) {
           violations.push(
             pkg.manifest + ': client feature package requests runtime external ' + JSON.stringify(specifier)
             + '; import shared types only or call an injected Cordis service',
@@ -662,7 +661,7 @@ async function readStaticLinkedRoster(root: string): Promise<Set<string>> {
   }
   const predicate = preset.isStaticLinkedConfig as (configs: readonly unknown[]) => boolean
   const roster = new Set<string>()
-  for (const configPath of globSync(CONFIG_GLOB, { cwd: root }).map(normalizePath).sort()) {
+  for (const configPath of globSync(CONFIG_GLOBS, { cwd: root }).map(normalizePath).sort()) {
     const loaded = await import(pathToFileURL(resolve(root, configPath)).href) as { default?: unknown }
     if (typeof loaded.default !== 'function') continue
     const configs = (loaded.default as (input: { env: Record<string, string> }) => unknown)({
@@ -782,7 +781,10 @@ async function readFacts(root: string): Promise<ClientPackageFacts> {
   const byManifest = new Map(declarations.map(entry => [entry.manifest, entry]))
   const packages: ClientPackage[] = []
 
-  for (const manifestPath of globSync(CLIENT_MANIFEST_GLOB, { cwd: root }).map(normalizePath).sort()) {
+  const clientManifests = declarations
+    .filter(entry => entry.manifest.startsWith('packages/client/') || entry.dynamic && entry.manifest.startsWith('enterprise/'))
+    .map(entry => entry.manifest)
+  for (const manifestPath of clientManifests) {
     const declaration = byManifest.get(manifestPath)
     if (declaration === undefined) throw new Error(GATE + ': no declaration facts for ' + manifestPath)
     const manifest = JSON.parse(readFileSync(resolve(root, manifestPath), 'utf8')) as Manifest

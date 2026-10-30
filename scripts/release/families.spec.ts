@@ -43,6 +43,16 @@ afterEach(() => {
 })
 
 describe('release families', () => {
+  it.each([true, false])('excludes enterprise workspaces from official releases with private=%s', (privatePackage) => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-release-enterprise-'))
+    roots.push(root)
+    write(join(root, 'enterprise/protocol/package.json'), JSON.stringify({
+      name: '@deepseek-ai/dsh-enterprise-protocol', version: '1.0.0', private: privatePackage,
+    }))
+    write(join(root, 'apps/public/package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-public', version: '0.0.1' }))
+    expect(releaseFamily('dsh').members(root).map(entry => entry.name)).toEqual(['@deepseek-ai/dsh-public'])
+  })
+
   it('publishes all current experimental packages', () => {
     const members = releaseFamily('dsh').members(resolve(import.meta.dirname, '../..'))
 
@@ -143,7 +153,7 @@ describe('release families', () => {
     roots.push(root)
     write(join(root, 'package.json'), '{"version":"0.0.1"}\n')
     write(join(root, 'apps/desktop/package.json'), '{"version":"0.0.1","private":true}\n')
-    write(join(root, 'backend/package.json'), '{"version":"0.0.1","private":true}\n')
+    write(join(root, 'enterprise/backend/package.json'), '{"version":"1.0.0","private":true}\n')
     write(join(root, 'packages/experimental/prototype/package.json'), '{"version":"0.0.1","private":true}\n')
     write(join(root, 'packages/core/unselected/package.json'), '{"version":"0.0.1"}\n')
 
@@ -155,7 +165,6 @@ describe('release families', () => {
       { path: 'package.json', tag: undefined },
       { path: 'packages/core/published/package.json', tag: 'dsh-v0.0.2' },
       { path: 'apps/desktop/package.json', tag: undefined },
-      { path: 'backend/package.json', tag: undefined },
       { path: 'packages/experimental/prototype/package.json', tag: undefined },
     ])
   })

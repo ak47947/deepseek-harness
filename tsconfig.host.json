@@ -8,9 +8,9 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
-    "apps/web/tests/enterprise-account.e2e.ts",
-    "backend/tests/**/*.ts",
-    "backend/deploy/**/*.ts",
+    "enterprise/*/tests/**/*.ts",
+    "enterprise/backend/deploy/**/*.ts",
+    "enterprise/desktop/scripts/**/*.ts",
     "apps/web/tests/creation-recommendations.e2e.ts",
     "apps/web/tests/plugin-recommendations.e2e.ts",
     "apps/web/tests/japanese-plugin-metadata.e2e.ts",
@@ -244,6 +244,8 @@
   // suffixes are mutually exclusive, so each aggregate excludes the other's
   // and the package test glob above needs no per-file entry.
   "exclude": [
+    "enterprise/*/tests/**/*.client.spec.ts",
+    "enterprise/*/tests/**/*.client.spec.tsx",
     "apps/desktop/tests/keyboard.spec.ts",
     "packages/client/*/src/**",
     "benchmarks/**/*.client.ts",
@@ -259,7 +261,7 @@
     "scripts/client-bundle-purity.spec.ts"
   ],
   "references": [
-    { "path": "./packages/client/ui-settings-enterprise-account/tsconfig.host.json" },
+    { "path": "./enterprise/account/tsconfig.host.json" },
     { "path": "./packages/experimental/action-cards" },
     { "path": "./packages/experimental/creation-recommendations" },
     { "path": "./packages/experimental/plugin-recommendations" },
@@ -572,7 +574,10 @@
     { "path": "./apps/cli" },
     { "path": "./apps/plugin-market-generator" },
     { "path": "./apps/desktop-host" },
-    { "path": "./backend" },
+    { "path": "./enterprise/backend" },
+    { "path": "./enterprise/protocol" },
+    { "path": "./enterprise/bundle" },
+    { "path": "./enterprise/desktop" },
     { "path": "./apps/desktop/tsconfig.host.json" }
   ]
 }

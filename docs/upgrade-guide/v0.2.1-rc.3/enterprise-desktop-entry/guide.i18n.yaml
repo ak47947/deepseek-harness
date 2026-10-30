@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.3/enterprise-desktop-entry/guide.md
 /:
-  en: 534dd1b56a74630b
-  zh: 4a1f24d805dcf261
+  en: 5824a74278b7956e
+  zh: d8307a4a42a4561e
 /enterprise-desktop-entry:
   en: beed2e3c474fa375
   zh: ee4837d5745a3752
 /enterprise-desktop-entry/change:
-  en: e4ad38ebce04af7b
-  zh: 57f8f9278eebf71f
+  en: 6155fbba747267df
+  zh: cd790539a0e518d8
 /enterprise-desktop-entry/migration:
-  en: 580e5e3447ee2404
-  zh: 9024d56c86efc309
+  en: 33b31f6eea9e0891
+  zh: 4ec17bb335d08870

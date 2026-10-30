@@ -626,23 +626,6 @@ export type OnboardingProcess = 'compact' | 'standard' | 'detailed'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-account -->
 
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-enterprise-account -->
-<a id="deepseek-aidsh-client-ui-settings-enterprise-account"></a>
-
-## `@deepseek-ai/dsh-client-ui-settings-enterprise-account`
-
-- `inject`: `systemPrompt`
-- `source`: [`packages/client/ui-settings-enterprise-account/src/index.ts:12`](../packages/client/ui-settings-enterprise-account/src/index.ts)
-
-```ts config-catalog
-/** Enterprise identity resolved from desktop file configuration. */
-export interface Config {
-  /** Name every enterprise agent uses when identifying itself. */
-  agentName: string
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-enterprise-account -->
-
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-models -->
 <a id="deepseek-aidsh-client-ui-settings-models"></a>
 

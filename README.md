@@ -24,7 +24,7 @@ From the repository checkout, run:
 pnpm run dev:desktop
 ```
 
-The application opens enterprise sign-in. Enterprise name and product name default to `Atrix Harness`; the service defaults to `http://127.0.0.1:3090`. Edit [desktop configuration](apps/desktop/config/desktop.json) to connect another enterprise service. Standalone Web launch is disabled.
+The application opens enterprise sign-in. Enterprise name and product name default to `Atrix Harness`; the service defaults to `http://127.0.0.1:3090`. Edit [desktop configuration](enterprise/desktop/config/desktop.json) to connect another enterprise service. The upstream Desktop entry is `pnpm run dev:desktop:upstream`; standalone Web launch remains available.
 
 ### Run from source
 

@@ -13,7 +13,7 @@ import { resolveMacOSPackageSettings } from './macos-package-settings.mjs'
 import { resolveWindowsSignatureCacheDirectory } from './windows-signature-cache-directory.mjs'
 import { resolveWindowsPackageSettings } from './windows-package-settings.mjs'
 import { resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
-import { resolveEnterprisePackageEnvironment } from './enterprise-package-environment.mjs'
+import { enterpriseReleaseSettings, localEnterprisePackageEnvironment, resolveEnterprisePackageEnvironment } from '../../../enterprise/desktop/scripts/enterprise-package-environment.mjs'
 
 const APP_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const SHARED_SETTING = /^(?:DSH_DESKTOP_(?:APP_ID|AUTO_UPDATE_ENV|NPM_REGISTRY|MANDATORY_UPDATE_(?:CONFIG|(?:TEST|PROD)_ORIGIN))|DOWNLOAD_TEST_RELEASE_ID|DOWNLOAD_(?:TEST|PROD)_(?:ORIGIN|COS_BUCKET|COS_SECRET_ID|COS_SECRET_KEY))$/u
@@ -28,13 +28,10 @@ const FILE_SETTINGS = ['DSH_DESKTOP_WINDOWS_CER_FILE', 'DSH_DESKTOP_WINDOWS_SIGN
  * @returns {NodeJS.ProcessEnv} Unsigned build environment with the standard application identifier and no update policy.
  */
 export function localMacOSPackageEnvironment(environment = process.env) {
-  const file = environment.DSH_DESKTOP_CONFIG_FILE ?? join(APP_ROOT, 'config', 'desktop.json')
-  const document = JSON.parse(readFileSync(file, 'utf8'))
-  const enterprise = { appId: 'com.atrix.desktop', enterpriseName: 'Atrix Harness', productName: 'Atrix Harness', origin: 'http://127.0.0.1:3090', ...document.enterprise }
   return {
     ...Object.fromEntries(Object.entries(environment).filter(([name]) => !AMBIENT_RELEASE_SETTING.test(name))),
-    DSH_DESKTOP_APP_ID: enterprise.appId,
-    DSH_DESKTOP_ENTERPRISE_CONFIG: JSON.stringify(enterprise),
+    DSH_DESKTOP_APP_ID: 'com.deepseek.harness',
+    ...localEnterprisePackageEnvironment(environment),
     DSH_DESKTOP_UNSIGNED: '1',
   }
 }
@@ -52,13 +49,8 @@ export function localMacOSPackageEnvironment(environment = process.env) {
  * @returns {NodeJS.ProcessEnv} Isolated environment with file-owned release settings.
  */
 export function loadDesktopPackageEnvironment(platform, environment = process.env, appRoot = APP_ROOT, options = {}) {
-  if (environment.DSH_ENTERPRISE_PACKAGING_ENV !== undefined) {
-    const path = environment.DSH_ENTERPRISE_PACKAGING_ENV
-    if (!isAbsolute(path)) throw new Error('enterprise package: DSH_ENTERPRISE_PACKAGING_ENV must be absolute')
-    const settings = readSettings(path, name => SHARED_SETTING.test(name) || WINDOWS_SETTING.test(name) || MACOS_SETTING.test(name) || /^DSH_DESKTOP_(?:UPDATE_CHANNEL|ENTERPRISE_(?:CONFIG|UPDATE_URL|POLICY_ORIGIN|ICON))$/u.test(name))
-    if (settings.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined) throw new Error('enterprise package: the selected release file must configure DSH_DESKTOP_ENTERPRISE_CONFIG')
-    return { ...Object.fromEntries(Object.entries(environment).filter(([name]) => !AMBIENT_RELEASE_SETTING.test(name))), ...settings }
-  }
+  const enterpriseSettings = enterpriseReleaseSettings(environment, readSettings, name => SHARED_SETTING.test(name) || WINDOWS_SETTING.test(name) || MACOS_SETTING.test(name))
+  if (enterpriseSettings !== undefined) return { ...Object.fromEntries(Object.entries(environment).filter(([name]) => !AMBIENT_RELEASE_SETTING.test(name))), ...enterpriseSettings }
   const compression = environment.PACKAGE_WINDOWS_COMPRESSION_LEVEL
   if (compression !== undefined && compression !== '') {
     if (platform !== 'win32' || !['3', '7'].includes(compression)) {

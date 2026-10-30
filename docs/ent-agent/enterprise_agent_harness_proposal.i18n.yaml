@@ -9,23 +9,26 @@
   en: b47889cb8ee9e46d
   zh: 9e0cca093a317179
 /enterprise-agent-desktop-architecture-and-delivery-plan/summary:
-  en: fabe284c6035e6a9
-  zh: df372766125a6b32
+  en: 184a915be638ea33
+  zh: 5f6a4292f366e8c9
 /enterprise-agent-desktop-architecture-and-delivery-plan/table-of-contents:
   en: 31b091f6e3e95d8a
   zh: c9bb6288340809de
 /enterprise-agent-desktop-architecture-and-delivery-plan/1-initial-scope:
-  en: a90358bea436574d
-  zh: 23132d2d3fdf711a
+  en: 934f081f71d791b5
+  zh: b053d286d8e44d4e
 /enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities:
-  en: 683d51fb145d5ada
-  zh: c815a17e4657b718
+  en: b78e0a2c149a3ea4
+  zh: 2a3d302e79b0becc
+/enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities/enterprise-package-isolation:
+  en: 10e20f5f642d33b9
+  zh: e66368de45d79db5
 /enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities/better-auth-and-the-administration-ui:
   en: f4f5f055eccec3b8
   zh: e5d94f94f2150a7e
 /enterprise-agent-desktop-architecture-and-delivery-plan/2-components-and-responsibilities/release-and-gateway-versions:
-  en: e78b4d8a6a6f4583
-  zh: e1f93cf2dbb80552
+  en: 1a0664edc4603590
+  zh: 8497e73dc9fafd0d
 /enterprise-agent-desktop-architecture-and-delivery-plan/3-deployment-architecture:
   en: 9aec0b4ad6f448ea
   zh: 7138a89945ff3cc3
@@ -57,14 +60,14 @@
   en: d4e86da4eb37cfaa
   zh: 7f720967e45b083f
 /enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/deployment-and-resources:
-  en: 7d0018002124b5b9
-  zh: 05fb0dd3adb9a96f
+  en: 1ebe238fb33865ca
+  zh: 7bd3496370abedec
 /enterprise-agent-desktop-architecture-and-delivery-plan/7-implementation-deployment-and-acceptance/required-acceptance-results:
-  en: 41d5b7f3d8a59da5
-  zh: 2d993884e195d734
+  en: 4aec908457019aee
+  zh: 55fbd3eca1d7c61c
 /enterprise-agent-desktop-architecture-and-delivery-plan/8-future-extensions:
   en: 1a9b22b323bccd5d
   zh: a84de2cd8a33a2ac
 /enterprise-agent-desktop-architecture-and-delivery-plan/dev-note:
-  en: ee22d0cd728dced3
-  zh: 96097c3d95a4c3f5
+  en: ae83179e5296e2bf
+  zh: 4762ac4510e76aac

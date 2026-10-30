@@ -735,9 +735,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:*
         version: link:../../packages/client/ui-primitives
-      '@deepseek-ai/dsh-client-ui-settings-enterprise-account':
-        specifier: workspace:*
-        version: link:../../packages/client/ui-settings-enterprise-account
       '@deepseek-ai/dsh-client-ui-settings-general':
         specifier: workspace:*
         version: link:../../packages/client/ui-settings-general
@@ -753,9 +750,12 @@ importers:
       '@deepseek-ai/dsh-deepseek-account':
         specifier: workspace:*
         version: link:../../packages/credentials/deepseek-account
-      '@deepseek-ai/dsh-enterprise':
+      '@deepseek-ai/dsh-enterprise-desktop-shell':
         specifier: workspace:*
-        version: link:../../backend
+        version: link:../../enterprise/desktop
+      '@deepseek-ai/dsh-enterprise-protocol':
+        specifier: workspace:*
+        version: link:../../enterprise/protocol
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../packages/util/home-paths
@@ -846,12 +846,12 @@ importers:
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../packages/client/connection
-      '@deepseek-ai/dsh-client-ui-settings-enterprise-account':
-        specifier: workspace:*
-        version: link:../../packages/client/ui-settings-enterprise-account
       '@deepseek-ai/dsh-deepseek-account':
         specifier: workspace:*
         version: link:../../packages/credentials/deepseek-account
+      '@deepseek-ai/dsh-enterprise-desktop':
+        specifier: workspace:*
+        version: link:../../enterprise/bundle
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../packages/util/home-paths
@@ -1084,46 +1084,6 @@ importers:
         specifier: 8.21.3
         version: 8.21.3
 
-  backend:
-    dependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:~
-        version: link:../vendor/cordis
-      '@deepseek-ai/cordis-plugin-logger-console':
-        specifier: workspace:~
-        version: link:../vendor/logger-console
-      '@deepseek-ai/dsh-app-boot':
-        specifier: workspace:*
-        version: link:../packages/boot/app-boot
-      better-auth:
-        specifier: 1.7.14
-        version: 1.7.14(@opentelemetry/api@1.9.1)(pg@8.23.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(vitest@4.1.11)(vue@3.5.42(typescript@6.0.3))
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
-      pg:
-        specifier: ^8.16.3
-        version: 8.23.1
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@deepseek-ai/dsh-brand':
-        specifier: workspace:*
-        version: link:../packages/util/brand
-      '@electric-sql/pglite':
-        specifier: 0.5.12
-        version: 0.5.12
-      '@electric-sql/pglite-socket':
-        specifier: 0.2.15
-        version: 0.2.15(@electric-sql/pglite-age@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pg_hashids@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pg_ivm@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pg_textsearch@0.0.14(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pg_uuidv7@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pgtap@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pgvector@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite@0.5.12)
-      '@types/pg':
-        specifier: ^8.15.5
-        version: 8.23.1
-      playwright:
-        specifier: ^1.61.1
-        version: 1.61.1
-
   benchmarks:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -1255,6 +1215,170 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  enterprise/account:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../vendor/schemastery
+        version: link:../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../vendor/cordis
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../packages/client/locale
+      '@deepseek-ai/dsh-client-store':
+        specifier: workspace:*
+        version: link:../../packages/client/store
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:*
+        version: link:../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-chat':
+        specifier: workspace:*
+        version: link:../../packages/client/ui-chat
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:*
+        version: link:../../packages/client/ui-conversation
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../../packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-sidebar':
+        specifier: workspace:*
+        version: link:../../packages/client/ui-sidebar
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../packages/client/ui-slots
+      '@deepseek-ai/dsh-enterprise-protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:*
+        version: link:../../packages/core/system-prompt
+      playwright:
+        specifier: ^1.61.1
+        version: 1.61.1
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
+  enterprise/backend:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-logger-console':
+        specifier: workspace:~
+        version: link:../../vendor/logger-console
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../packages/boot/app-boot
+      '@deepseek-ai/dsh-enterprise-protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      better-auth:
+        specifier: 1.7.14
+        version: 1.7.14(@opentelemetry/api@1.9.1)(pg@8.23.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(vitest@4.1.11)(vue@3.5.42(typescript@6.0.3))
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
+      pg:
+        specifier: ^8.16.3
+        version: 8.23.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.12
+        version: 0.5.12
+      '@electric-sql/pglite-socket':
+        specifier: 0.2.15
+        version: 0.2.15(@electric-sql/pglite-age@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pg_hashids@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pg_ivm@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pg_textsearch@0.0.14(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pg_uuidv7@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pgtap@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite-pgvector@0.0.13(@electric-sql/pglite@0.5.12))(@electric-sql/pglite@0.5.12)
+      '@types/pg':
+        specifier: ^8.15.5
+        version: 8.23.1
+      playwright:
+        specifier: ^1.61.1
+        version: 1.61.1
+
+  enterprise/bundle:
+    dependencies:
+      '@deepseek-ai/dsh-client-ui-settings-enterprise-account':
+        specifier: workspace:*
+        version: link:../account
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../packages/boot/app-boot
+
+  enterprise/desktop:
+    dependencies:
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: workspace:~
+        version: link:../../vendor/include
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../packages/boot/app-boot
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../packages/util/atomic-write
+      '@deepseek-ai/dsh-credentials-local':
+        specifier: workspace:*
+        version: link:../../packages/credentials/credentials-local
+      '@deepseek-ai/dsh-enterprise-protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@deepseek-ai/dsh-official-bundles':
+        specifier: workspace:*
+        version: link:../../packages/util/official-bundles
+      js-yaml:
+        specifier: ^4.3.2
+        version: 4.3.2
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../vendor/cordis
+      '@deepseek-ai/dsh-client-ui-settings-enterprise-account':
+        specifier: workspace:*
+        version: link:../account
+      '@deepseek-ai/dsh-deepseek-account':
+        specifier: workspace:*
+        version: link:../../packages/credentials/deepseek-account
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
+      electron:
+        specifier: ^44.7.0
+        version: 44.7.0(supports-color@9.4.0)
+      sharp:
+        specifier: 0.35.5
+        version: 0.35.5(@types/node@22.20.1)
+
+  enterprise/protocol:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../vendor/cordis
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../packages/util/brand
 
   native/system:
     devDependencies:
@@ -5579,52 +5703,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../ui-slots
-      react:
-        specifier: ^18.2.0
-        version: 18.3.1
-
-  packages/client/ui-settings-enterprise-account:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:~
-        version: link:../../../vendor/cordis
-      '@deepseek-ai/dsh-client-locale':
-        specifier: workspace:*
-        version: link:../locale
-      '@deepseek-ai/dsh-client-store':
-        specifier: workspace:*
-        version: link:../store
-      '@deepseek-ai/dsh-client-test-runtime':
-        specifier: workspace:*
-        version: link:../../test-support/client-runtime
-      '@deepseek-ai/dsh-client-ui-chat':
-        specifier: workspace:*
-        version: link:../ui-chat
-      '@deepseek-ai/dsh-client-ui-conversation':
-        specifier: workspace:*
-        version: link:../ui-conversation
-      '@deepseek-ai/dsh-client-ui-primitives':
-        specifier: workspace:*
-        version: link:../ui-primitives
-      '@deepseek-ai/dsh-client-ui-renderer':
-        specifier: workspace:*
-        version: link:../ui-renderer
-      '@deepseek-ai/dsh-client-ui-settings':
-        specifier: workspace:*
-        version: link:../ui-settings
-      '@deepseek-ai/dsh-client-ui-sidebar':
-        specifier: workspace:*
-        version: link:../ui-sidebar
-      '@deepseek-ai/dsh-client-ui-slots':
-        specifier: workspace:*
-        version: link:../ui-slots
-      '@deepseek-ai/dsh-system-prompt':
-        specifier: workspace:*
-        version: link:../../core/system-prompt
       react:
         specifier: ^18.2.0
         version: 18.3.1

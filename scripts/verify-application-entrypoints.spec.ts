@@ -29,7 +29,7 @@ describe('application entrypoints', () => {
     expect(applicationEntrypointViolations(resolve(import.meta.dirname, '..'))).toEqual([])
   })
 
-  it.each(['packages/example/app', 'backend'])('rejects an application bin in %s', (directory) => {
+  it.each(['packages/example/app', 'enterprise/backend'])('rejects an application bin in %s', (directory) => {
     const root = fixture()
     write(root, `${directory}/package.json`, JSON.stringify({ bin: { app: 'lib/bin.js' } }))
 
@@ -47,7 +47,7 @@ describe('application entrypoints', () => {
     ])
   })
 
-  it.each(['apps/example', 'backend'])('rejects an executable at the %s package root', (directory) => {
+  it.each(['apps/example', 'enterprise/backend'])('rejects an executable at the %s package root', (directory) => {
     const root = fixture()
     write(root, `${directory}/rogue.mjs`, '#!/usr/bin/env node\n')
 
@@ -109,7 +109,8 @@ describe('application entrypoints', () => {
     write(root, 'package.json', JSON.stringify({ scripts: { 'start:web': 'node packages/example/app/src/bin.ts web' } }))
 
     expect(applicationEntrypointViolations(root)).toEqual([
-      'package.json scripts.start:web: standalone Web launchers are disabled; use enterprise Desktop',
+      'package.json scripts.start:web: application launcher script must launch apps/cli/src/bin.ts',
+      'package.json scripts.start:web: application launcher script must not launch a package entry directly',
     ])
   })
 
@@ -119,7 +120,7 @@ describe('application entrypoints', () => {
     write(root, 'scripts/dev-web.ts', "execa('vite', ['build', '--watch'])\n")
 
     expect(applicationEntrypointViolations(root)).toEqual([
-      'package.json scripts.dev:web: standalone Web launchers are disabled; use enterprise Desktop',
+      'scripts/dev-web.ts: application launcher wrapper must launch apps/cli/src/bin.ts',
     ])
   })
 

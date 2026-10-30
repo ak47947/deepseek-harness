@@ -10,7 +10,7 @@ export interface DesktopPackageUpdateFeed {
 
 /**
  * Resolve the feed sealed into one package.
- * Unsigned macOS releases carry no in-application updater; unsigned Windows keeps its feed.
+ * Unsigned upstream packages carry no feed; enterprise unsigned Windows keeps its configured feed.
  * @param env - Packaging environment.
  * @param platform - Target platform.
  * @param arch - Target architecture.

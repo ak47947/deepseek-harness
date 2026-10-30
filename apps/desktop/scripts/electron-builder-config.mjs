@@ -23,7 +23,7 @@ import {
 import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environment.mjs'
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
-import { resolveEnterprisePackageEnvironment } from './enterprise-package-environment.mjs'
+import { resolveEnterprisePackageEnvironment } from '../../../enterprise/desktop/scripts/enterprise-package-environment.mjs'
 import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
 import { desktopArtifactOutput, desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 import { installWindowsDirectoryInstaller } from './windows-directory-installer.mjs'
@@ -38,8 +38,8 @@ import {
 
 /**
  * Resolve the feed sealed into one package.
- * Unsigned macOS releases carry no in-application updater because MDM distributes their DMG.
- * Unsigned Windows keeps its feed: the sealed app-update.yml names no publisherName, so
+ * Unsigned upstream packages carry no update feed. Enterprise unsigned macOS releases use MDM.
+ * Enterprise unsigned Windows keeps its feed: the sealed app-update.yml names no publisherName, so
  * electron-updater skips signature verification of the downloaded installer.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
  * @param {NodeJS.Platform} platform - Target platform.
@@ -49,12 +49,8 @@ import {
  * @returns {object | undefined} Sealed update feed, or undefined when this build has none.
  */
 export function resolveUpdateFeed(env, platform, arch, enterprise, unsigned) {
-  if (!unsigned) return enterprise === undefined ? resolveDesktopAutoUpdateConfig(env, platform, arch) : enterprise.update
-  if (platform !== 'win32') return undefined
-  if (enterprise !== undefined) return enterprise.update
-  // A local unsigned Windows build seals a feed only when its release settings name a destination.
-  const configured = (env.DOWNLOAD_TEST_ORIGIN ?? '').trim() !== '' || env.DSH_DESKTOP_AUTO_UPDATE_ENV === 'production'
-  return configured ? resolveDesktopAutoUpdateConfig(env, platform, arch) : undefined
+  if (enterprise === undefined) return unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, platform, arch)
+  return unsigned && platform !== 'win32' ? undefined : enterprise.update
 }
 
 /**
@@ -152,7 +148,8 @@ export function createElectronBuilderConfig(
       if (resolvedPlatform !== 'win32') return true
       await promisify(execFile)('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
         fileURLToPath(new URL('./prepare-windows-installer.ps1', import.meta.url)),
-        '-OutputDirectory', join(buildPaths.root, 'installer-ui')], {
+        '-OutputDirectory', join(buildPaths.root, 'installer-ui'),
+        ...enterprise === undefined ? [] : ['-AssetDirectory', enterprise.installerAssets]], {
         env: scrubWindowsSigningEnvironment(env), windowsHide: true,
       })
       await writeFile(join(buildPaths.root, 'installer-ui', 'strings.nsh'), renderInstallerStrings(readInstallerLocales()), 'utf8')
@@ -181,12 +178,12 @@ export function createElectronBuilderConfig(
     asarUnpack: unpack,
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
-      { from: enterprise?.icon ?? fileURLToPath(new URL(enterprise === undefined ? '../resources/icon-windows.png' : '../resources/enterprise/icon-windows.png', import.meta.url)), to: 'icon.png' },
+      { from: enterprise?.artwork.windows ?? fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
       // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
-      ...(packagesWindows ? [{ from: fileURLToPath(new URL(enterprise === undefined ? '../resources/tray-windows.ico' : '../resources/enterprise/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
+      ...(packagesWindows ? [{ from: enterprise?.artwork.tray ?? fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
     ],
     mac: {
-      icon: enterprise?.icon ?? fileURLToPath(new URL(enterprise === undefined ? '../resources/icon-macos.png' : '../resources/enterprise/icon.icns', import.meta.url)),
+      icon: enterprise?.artwork.mac ?? fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
       category: 'public.app-category.developer-tools',
       // macOS matches the application locale against this bundle, not Electron Framework resources.
       extendInfo: {
@@ -267,7 +264,7 @@ export function createElectronBuilderConfig(
       )
     },
     win: {
-      icon: enterprise?.icon ?? fileURLToPath(new URL(enterprise === undefined ? '../resources/icon-windows.png' : '../resources/enterprise/icon-windows.png', import.meta.url)),
+      icon: enterprise?.artwork.windows ?? fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)),
       forceCodeSigning: !unsigned,
       signtoolOptions: {
         sign: windowsSigner,

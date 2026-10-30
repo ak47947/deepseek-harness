@@ -167,12 +167,14 @@ describe('browser face discovery', () => {
       // plain `src` (the node half) is out of scope.
       writeProject(root, 'packages/client/dual-package', { lib: ['ES2024', 'DOM'], sources: ['src/client/View.tsx', 'src/node.ts'] })
       writeProject(root, 'packages/client/host-package', { lib: ['ES2024'], sources: ['src/host.ts'] })
+      writeProject(root, 'enterprise/account', { lib: ['ES2024', 'DOM'], sources: ['src/client/View.tsx', 'src/node.ts'] })
       writeFaceAggregates(root, [
         'packages/client/browser-package', 'packages/client/shared-package',
         'packages/client/dual-package', 'packages/client/host-package',
       ], ['packages/client/shared-package', 'packages/client/dual-package', 'packages/client/host-package'])
 
       expect(browserFaceSources(root)).toEqual([
+        'enterprise/account/src/client/View.tsx',
         'packages/client/browser-package/src/view.ts',
         'packages/client/dual-package/src/client/View.tsx',
         'packages/client/shared-package/src/both-faces.ts',

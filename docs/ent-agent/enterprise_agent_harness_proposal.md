@@ -12,6 +12,8 @@ Employees sign in to DeepSeek Harness Desktop with company accounts, process loc
 
 Basic mode distributes provider configuration and sends model calls directly from employee computers to providers. Optional managed mode routes calls through the enterprise backend and LiteLLM for budgets and usage. Local execution does not keep model inputs local: file content, screenshots, and tool results included in requests still reach the provider, and managed mode also sends them through the backend and LiteLLM.
 
+Enterprise implementations live under [`enterprise/`](../../enterprise/README.md). A bundle layers enterprise Host and Client plugins over the standard DSH composition. The shared Desktop application uses a native adapter for authentication and account lifecycle, while retaining the common window, Host, and tool implementations.
+
 ## Table of Contents
 
 - [1. Initial scope](#initial-scope)
@@ -33,7 +35,7 @@ Deliver the basic path first: deploy the server, create employees and model assi
 
 | Module | Initial requirements |
 |---|---|
-| Enterprise Desktop | Use official `apps/desktop` with independent branding, `appId`, signing, notarization, and updates; reuse local runtime and tools |
+| Enterprise Desktop | Reuse shared `apps/desktop` with the `enterprise/desktop` native adapter and enterprise bundle; keep independent branding, `appId`, signing, notarization, and updates |
 | Remote authentication | Run Better Auth only on the server; administrators sign in at `/admin` with email and password, while Desktop supports [OIDC sign-in and provisioning](#oidc-sign-in-and-account-provisioning) and optional email/password sign-in; Desktop requires no local authentication service or database |
 | Independent administration | Administrators access server `/admin` from an ordinary browser without installing or starting Desktop; manage employees, roles, and model assignments |
 | Local data | Give each company/employee account its own `DSH_HOME`; preserve projects and history across switching and reject cross-account reads |
@@ -50,11 +52,21 @@ The initial scope excludes public self-registration, a bundled third-party IAM s
 
 | Component | Choice and responsibilities |
 |---|---|
-| Desktop | Official Electron application and `dsh` profile; do not add another Desktop distribution or agent loop |
+| Desktop | Shared Electron application and `dsh` profile, with enterprise plugins and a native adapter; reuse the existing main program and agent loop |
 | Authentication | Server-side Better Auth with Admin, Bearer, and Generic OAuth plugins for administrator credentials, login limits, sessions, users, and roles; standard OIDC connects the company's identity provider (such as Casdoor, Keycloak, or Okta) for Desktop sign-in |
 | Administration UI and business APIs | A lightweight application-owned UI and enterprise APIs; reuse Better Auth administrative APIs and own model assignments and optional budgets |
 | Persistence | PostgreSQL stores authentication data and encrypted model configuration; LiteLLM uses a separate database when enabled |
 | Model gateway | Optional pinned and qualified open-source LiteLLM with management APIs; provider credentials and employee virtual keys stay on the server |
+
+### Enterprise package isolation
+
+[`enterprise/`](../../enterprise/README.md) owns enterprise source, deployment settings, artwork, packaging helpers, and tests. The backend and Desktop share only `enterprise/protocol` validation and identity types. Desktop therefore imports no authentication server or database implementation.
+
+`enterprise/bundle` selects enterprise behavior through the standard profile loader. `enterprise/account` contributes account Settings, branding slots, and the assistant identity. Approved model data and credential references enter the account profile and reuse the existing model, settings, and credential services. Future enterprise Host and Client features use plugins and bundles first.
+
+`enterprise/desktop` is an Electron adapter library. It owns browser authorization, secure saved sessions, account-specific paths, profile preparation, native account operations, and enterprise release resources. Authentication and verified account preparation precede Host startup; revocation, hard expiry, and account switching control Host shutdown. These requirements cannot depend on an optional plugin that starts after the workspace is active.
+
+Shared Desktop files retain narrow product operations and preload integration. Enterprise endpoints, policies, and branding stay in their enterprise owner. Add a generic interface only when the integration requires one, and validate its ordinary and enterprise consumers together. Reusing the main program and standard profile keeps upstream synchronization focused on these interfaces rather than duplicated application code.
 
 ### Better Auth and the administration UI
 
@@ -62,7 +74,7 @@ Better Auth implements authentication rather than the complete application admin
 
 ### Release and gateway versions
 
-The enterprise distribution owns its name, artwork, application identity, signing credentials, and update destinations, following the [official publishing workflow](../../apps/desktop/publishing/README.md) and [Windows signing requirements](../../apps/desktop/windows-signing/README.md). Official updates must not replace the enterprise client. The [enterprise application reference](../../backend/README.md#enable-managed-mode) owns the LiteLLM version, configuration, and qualified APIs; commercial SSO, SCIM, and administrative auditing are not dependencies.
+The enterprise distribution owns its name, artwork, application identity, signing credentials, and update destinations, following the [official publishing workflow](../../apps/desktop/publishing/README.md) and [Windows signing requirements](../../apps/desktop/windows-signing/README.md). Official updates must not replace the enterprise client. The [enterprise application reference](../../enterprise/backend/README.md#enable-managed-mode) owns the LiteLLM version, configuration, and qualified APIs; commercial SSO, SCIM, and administrative auditing are not dependencies.
 
 -----
 
@@ -208,12 +220,13 @@ With parallel frontend/backend work, ready signing credentials and OIDC identity
 
 Start with local Docker deployment and verify administration and Desktop development against the loopback IP address; local company email/password testing requires no domain. When moving to a server, email/password-only deployments may use a reachable server IP or domain with an HTTPS certificate trusted by employee computers; loopback HTTP remains limited to development on the same machine. Real OIDC integration testing and production require registering the Better Auth Generic OAuth callback URL (`/api/auth/callback/enterprise-oidc`) on the company's OIDC identity provider and serving the enterprise origin over HTTPS.
 
-Maintain the enterprise service in the top-level `backend/` directory and deploy it only through Docker Compose. The backend container initializes its service profile and launches `dsh --profile enterprise` internally. Compose also provides PostgreSQL and the static update origin behind an existing company HTTPS proxy or optional Caddy. Managed mode adds LiteLLM and its own database. The [enterprise application reference](../../backend/README.md) owns deployment commands, environment settings, Desktop release templates, and backup procedures; do not distribute server `.env` files to employees.
+Maintain the enterprise service in the top-level `enterprise/backend/` directory and deploy it only through Docker Compose. The backend container initializes its service profile and launches `dsh --profile enterprise` internally. Compose also provides PostgreSQL and the static update origin behind an existing company HTTPS proxy or optional Caddy. Managed mode adds LiteLLM and its own database. The [enterprise application reference](../../enterprise/backend/README.md) owns deployment commands, environment settings, Desktop release templates, and backup procedures; do not distribute server `.env` files to employees.
 
 Run one backend container. Back up databases, unchanged encryption secrets, update artifacts, and managed-mode database/salt; verify identities, assignments, gateway associations, and accumulated spend after isolated restoration. No local large-model hosting or vectorization requires GPUs. Measure capacity from concurrency, request duration, database load, and retention rather than promising 200–1000 employees or adding replicas before the pilot.
 
 ### Required acceptance results
 
+- Enterprise implementation and resources remain under `enterprise/`; the shared Desktop application contains only the required product interfaces and consumers. The standard profile and official release do not acquire enterprise behavior. Verify plugin activation, profile recovery, and upgrade compatibility together with the authentication and shutdown requirements below.
 - The server runs independently without Desktop. An administrator uses another browser at `/admin` to sign in with email and password and configure the application; signed-out users and ordinary employees cannot read or change administrative data.
 - Employee Desktop needs no Better Auth server, database, server secret, or server `.env`. Its remote HTTPS origin serves browser login, session verification, and provisioning; the loopback listener accepts only short-lived authorization codes.
 - By default, only precreated employees with explicit bindings can sign in through OIDC. Before enabling automatic provisioning, verify that the IdP rejects identities without application assignment, guests, and third-party identities without employee admission checks; approved new employees receive `role = user` and default models. Matching emails never implicitly link accounts; administrator OIDC sign-in and direct employee password requests when password sign-in is disabled are rejected.
@@ -243,4 +256,4 @@ Run one backend container. Back up databases, unchanged encryption secrets, upda
 <a id="dev-note"></a>
 ## Dev Note
 
-This document defines requirements and acceptance; the [enterprise application reference](../../backend/README.md) owns implementation and operation. Sources and automated checks prove only the behavior they cover. A reachable HTTPS IP address or domain, certificate trust, OIDC identity-provider configuration and real authorization callbacks, enterprise signing/notarization, update publication, approved models and Office tasks, capacity, and restoration drills require verification on target infrastructure; passing local tests does not replace deployment acceptance.
+This document defines requirements and acceptance; the [enterprise application reference](../../enterprise/backend/README.md) owns implementation and operation. Sources and automated checks prove only the behavior they cover. A reachable HTTPS IP address or domain, certificate trust, OIDC identity-provider configuration and real authorization callbacks, enterprise signing/notarization, update publication, approved models and Office tasks, capacity, and restoration drills require verification on target infrastructure; passing local tests does not replace deployment acceptance.

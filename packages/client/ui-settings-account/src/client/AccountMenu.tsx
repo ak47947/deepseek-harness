@@ -1,12 +1,14 @@
 /** Sidebar account launcher and locally authoritative sign-out action. */
 import { useEffect, useRef, useState } from 'react'
 import {
-  Toast, Menu, AccountLauncher, IconPaperPlaneOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium, LogoutIcon,
+  Toast, Menu, IconEllipsisOutlineMedium, IconPaperPlaneOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AccountSectionInjected } from './AccountSection.tsx'
 import { SignOutDialog } from './SignOutDialog.tsx'
 import { SignInDialog } from './SignInDialog.tsx'
+import { LogoutIcon } from './LogoutIcon.tsx'
+import { AccountAvatar } from './AccountAvatar.tsx'
 import { AccountNoticeStack } from './AccountNotice.tsx'
 import css from './AccountMenu.module.css'
 
@@ -60,10 +62,15 @@ export function AccountMenu({
       anchor={anchor} title={t('bonusNoticeTitle')} closeLabel={t('close')}
       onShown={bonusNoticeShown} onDismiss={bonusNoticeDismissed} />}
     <Menu open={open} side="top" portal autoFocus className={css.anchor} listClassName={signedIn ? undefined : css.signedOutMenu}
-      anchor={<AccountLauncher ref={trigger} wide={wide} signedIn={signedIn} label={signedIn ? label : t('more')}
-        ariaLabel={t('menu')} open={open} onClick={() => { setOpen(value => !value) }}
-        avatarStatus={account.avatar?.status} avatarUrl={account.avatar?.status === 'ready' ? account.avatar.url : undefined}
-        onAvatarError={() => { if (account.avatar !== undefined) avatarFailed(account.avatar) }} />}
+      anchor={<button ref={trigger} type="button" className={css.trigger} data-collapsed={!wide} data-signed-out={!signedIn} aria-label={t('menu')}
+        aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen(value => !value) }}>
+        {signedIn
+          ? <span className={css.avatar} data-avatar-status={account.avatar?.status}>
+            <AccountAvatar avatar={account.avatar} avatarFailed={avatarFailed} />
+          </span>
+          : <IconEllipsisOutlineMedium size={14} />}
+        {wide && <span className={css.label}>{signedIn ? label : t('more')}</span>}
+      </button>}
       items={[
         { id: 'settings', label: t('settings'), icon: <IconSettingsOutlineMedium size={16} />,
           ...(settingsShortcut === undefined ? {} : { shortcut: settingsShortcut }) },

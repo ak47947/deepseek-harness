@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveDesktopLocale } from '../src/locale.ts'
-import { enterpriseDesktopLocale } from '../src/enterprise-branding.ts'
+import { enterpriseDesktopLocale } from '../../../enterprise/desktop/src/enterprise-branding.ts'
 import { needsWelcome, WELCOME_IPC } from '../src/welcome-api.ts'
 
 const electron = vi.hoisted(() => ({

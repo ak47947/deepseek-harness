@@ -21,6 +21,6 @@ it.skipIf(process.platform === 'win32').each([undefined, '{"productName":"Enterp
       home, primaryRuntime, enterpriseConfig, userData: join(root, 'browser data'), mainPort: 9229, rendererPort: 9222, hostPort: 9230, openDevtools: '0' }, bundle))
     const result = execFileSync('/bin/sh', [launcher, '--test-launch-argument'], { encoding: 'utf8',
       env: { ...process.env, DSH_DESKTOP_ENTERPRISE_CONFIG: '' } })
-    expect(result.trimEnd().split('\n')).toEqual([home, '1', '0', primaryRuntime, '', '--inspect=127.0.0.1:9229',
+    expect(result.trimEnd().split('\n')).toEqual([home, '1', '0', primaryRuntime, enterpriseConfig ?? '', '--inspect=127.0.0.1:9229',
       '--remote-debugging-port=9222', `--user-data-dir=${join(root, 'browser data')}`, root, '--test-launch-argument'])
   })

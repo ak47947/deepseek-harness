@@ -318,9 +318,11 @@ describe('client build environment', () => {
     write(join(official, 'apps/web/dist/index.html'), '<main>changed</main>')
     expect(() => { readClientBuildRecord(official) }).toThrow(/artifacts differ/)
 
-    const chunked = buildFixture(officialEnvironment)
-    write(join(chunked, 'packages/client/example/lib/client.pdf.js'), 'module.exports = {}\n')
-    expect(() => { readClientBuildRecord(chunked) }).toThrow(/artifacts differ/)
+    for (const directory of ['packages/client/example', 'enterprise/account']) {
+      const chunked = buildFixture(officialEnvironment)
+      write(join(chunked, directory, 'lib/client.pdf.js'), 'module.exports = {}\n')
+      expect(() => { readClientBuildRecord(chunked) }).toThrow(/artifacts differ/)
+    }
 
     const dual = buildFixture(officialEnvironment)
     write(join(dual, 'packages/client/example/lib/client.node.js'), 'export const node = true\n')

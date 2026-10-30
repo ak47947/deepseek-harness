@@ -208,15 +208,15 @@ describe('package dependency scope', () => {
   it('discovers the backend workspace without treating nested packages as workspaces', () => {
     const { packages } = workspaceFixture({
       'package.json': { name: '@deepseek-ai/dsh-root' },
-      'backend/package.json': { name: '@deepseek-ai/dsh-enterprise' },
-      'backend/nested/package.json': { name: '@fixture/nested' },
+      'enterprise/backend/package.json': { name: '@deepseek-ai/dsh-enterprise' },
+      'enterprise/backend/nested/package.json': { name: '@fixture/nested' },
     })
-    expect(packages.map(pkg => pkg.manifestPath)).toEqual(['backend/package.json'])
+    expect(packages.map(pkg => pkg.manifestPath)).toEqual(['enterprise/backend/package.json'])
   })
 
   it('rejects a backend workspace without a package name', () => {
-    expect(() => workspaceFixture({ 'package.json': {}, 'backend/package.json': {} }))
-      .toThrow('backend/package.json: missing package name')
+    expect(() => workspaceFixture({ 'package.json': {}, 'enterprise/backend/package.json': {} }))
+      .toThrow('enterprise/backend/package.json: missing package name')
   })
 
   it('keeps the measured Host relay roster explicit', () => {

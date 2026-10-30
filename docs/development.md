@@ -93,7 +93,7 @@ Choose the command by what the change needs:
 
 | Situation | Command |
 |---|---|
-| Iterating on package sources and needing runnable artifacts | `pnpm run build:artifacts`; `dev:desktop` run it before launching |
+| Iterating on package sources and needing runnable artifacts | `pnpm run build:artifacts`; `dev:web` and `dev:desktop` run it before launching |
 | Type-checking tests, scripts, benchmarks, or website code | `pnpm run build:check` after the latest `build:artifacts`; rerun `build:artifacts` first when package sources changed |
 | Before declaring TypeScript work complete | `pnpm run build:check` after the latest `build:artifacts`, or `pnpm run build` |
 | Complete verification, as the required CI build lanes run it | `pnpm run build` |
@@ -106,7 +106,7 @@ Both tsdown passes match `vendor/*`, `packages/*/*`, and `apps/cli`; the Host pa
 
 Typert analyzes Host types through `tsconfig.host.json` and generates Host reflection and Host-for-Client Remote declarations before package compilation. The source-only [`generate-typert.ts`](../scripts/generate-typert.ts) pass rejects workspace imports that require built output, including metadata dependencies that return to generated declarations. Host tsdown lowers source decorators without generating metadata again; Client tsdown also consumes the existing metadata. `pnpm run typecheck` generates metadata, compiles Host and Client packages in reference order, and checks each aggregate with `tsc -b` after its package compilation. It skips the native addon, bundles, Web, and the client build record. `lint`, `lint:fix`, and `doc-typecheck` prepare metadata and Host package declarations through `compile-referenced-projects.ts host-contracts`; generation failure stops dependent compilation. These declaration-only commands do not update runtime bundles: run `build:artifacts` before launching or testing built output.
 
-`pnpm run build` and `build:artifacts` embed the root package version, the seven-character source commit, and a dirty marker when Git reports local changes; they also inherit other caller-supplied `DSH_CLIENT_*` values. `pnpm run build:official` is the cross-platform local equivalent of the CI and release artifact build and omits the local dirty marker. Each successful `build` or `build:artifacts` writes a gitignored record that binds the exact public values to the Vite output and dynamic client bundles; release packing and built Web tests reject a missing record or artifacts changed by a later partial build. Enterprise Desktop loads the built client artifacts inside its native window.
+`pnpm run build` and `build:artifacts` embed the root package version, the seven-character source commit, and a dirty marker when Git reports local changes; they also inherit other caller-supplied `DSH_CLIENT_*` values. `pnpm run build:official` is the cross-platform local equivalent of the CI and release artifact build and omits the local dirty marker. Each successful `build` or `build:artifacts` writes a gitignored record that binds the exact public values to the Vite output and dynamic client bundles; release packing and built Web tests reject a missing record or artifacts changed by a later partial build. `pnpm run dev:web` runs `build:artifacts` first (`--skip-build` reuses an existing artifact tree instead), then samples the current version and Git state once and shares that environment across every watcher stage for the session; it does not validate the complete-build record because the watcher stages rewrite its recorded artifacts.
 
 `pnpm run build --profile local` explicitly selects local client branding, preserves repository version, commit and dirty metadata, and discards inherited client title and other public overrides. `build:official` retains its exact official values. [Desktop packaging](../apps/desktop/packaging/README.md#configuration-and-local-builds) selects the profile for each signing mode.
 
@@ -185,14 +185,16 @@ pnpm run demo:ptc -- "summarize this workspace"
 
 ### Application commands
 
-Enterprise Desktop is the graphical application entry. It reads `apps/desktop/config/desktop.json`; omitted enterprise fields retain the Atrix Harness defaults and local service port 3090. `start:desktop` uses existing artifacts; `dev:desktop` builds first:
+Web and Desktop share one command pair. `start:*` launches the artifacts of a prior `pnpm run build` or `build:artifacts`; `dev:*` runs `build:artifacts` first and then launches. Web additionally keeps client bundles rebuilt on source edits, because its Host runs from source while the browser loads built bundles:
 
 ```sh
-pnpm run start:desktop   # launch built enterprise Desktop artifacts
-pnpm run dev:desktop     # build, then launch enterprise Desktop
+pnpm run start:web       # serve built Web artifacts through the source launcher (the same launch as pnpm dsh web)
+pnpm run dev:web         # build, serve, and rebuild Web client bundles on source edits
+pnpm run start:desktop   # launch built Desktop artifacts
+pnpm run dev:desktop     # build, then launch Desktop
 ```
 
-`make desktop`, `make dev-desktop`, and `make build` provide the same commands. Standalone Web launch commands are disabled; Desktop keeps its internal browser renderer and Host transport. See the [Desktop README](../apps/desktop/README.md) for configuration and native development settings.
+Arguments after a Web command reach `dsh web`, for example `pnpm run dev:web --no-open --port 3081`; `dev:web` also accepts `--skip-build` to reuse the existing artifact tree and `--no-serve` to run only the rebuild watchers beside a server started elsewhere. Both Web commands use the normal Harness home, while the Desktop commands use the isolated development home described in the [Desktop README](../apps/desktop/README.md). The root `Makefile` names the same commands as `make web`, `make dev-web`, `make desktop`, `make dev-desktop`, and `make build`; `ARGS='--no-open'` forwards options.
 
 ### TODO markers
 
@@ -213,3 +215,5 @@ The [subsystems](subsystems/README.md) pages paste source-equivalent declaration
 ```
 
 `pnpm run verify-type-equiv` (part of `doc-sync`) then extracts that symbol's declaration and attached JSDoc from source via the TypeScript parser and asserts the block matches both. For a class whose implementation bodies do not belong in the catalog, use ` ```ts public-api ` and set `"projection": "public-api"`; the checked projection retains the public fields, constructor, accessors, methods, and original class/member JSDoc while omitting bodies and private or protected members. Comparison ignores whitespace and non-JSDoc comments but requires every original JSDoc comment, including member documentation, so readers see the source contract beside the exact type definition. The gate enforces a 1:1 correspondence by document, symbol, and projection between primary blocks and manifest entries; a paired `.zh.md` block reuses its unsuffixed sibling's entry only when the whole tracked fence sequence is byte-identical and ordered identically. `doc-typecheck` applies the same derivative rule to compilable fences, while skipping both source-equivalence fence kinds from compilation and its opt-out ratio. When you change a documented declaration or its JSDoc, the gate fails until you update the paste; when you add or remove a primary block, update the manifest in the same change.
+
+Enterprise customization has its own [development and deployment owner](../enterprise/README.md). Repository `dev:desktop` and `start:desktop` select the enterprise configuration in `enterprise/desktop/config/desktop.json`; their `:upstream` counterparts launch the original shell. Keep new enterprise behavior in that directory and mount Host and Client features through the enterprise bundle.

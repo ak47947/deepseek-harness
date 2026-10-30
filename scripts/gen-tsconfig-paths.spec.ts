@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { describe, expect, it, onTestFinished } from 'vitest'
 import {
   collectPackageAliases,
   collectPackageNames,
@@ -13,6 +14,22 @@ import {
 const root = resolve(import.meta.dirname, '..')
 
 describe('generated tsconfig package aliases', () => {
+  it('maps product-owned enterprise directory names and rejects duplicate package identities', () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'dsh-enterprise-aliases-'))
+    onTestFinished(() => { rmSync(fixture, { recursive: true, force: true }) })
+    const directory = join(fixture, 'enterprise/protocol')
+    mkdirSync(join(directory, 'src'), { recursive: true })
+    writeFileSync(join(directory, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-enterprise-protocol' }))
+    expect(collectPackageAliases(fixture)).toEqual([
+      { specifier: '@deepseek-ai/dsh-enterprise-protocol', source: './enterprise/protocol/src' },
+    ])
+    expect(collectPackageNames(fixture)).toEqual(['@deepseek-ai/dsh-enterprise-protocol'])
+    const duplicate = join(fixture, 'packages/identity/enterprise-protocol')
+    mkdirSync(join(duplicate, 'src'), { recursive: true })
+    writeFileSync(join(duplicate, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-enterprise-protocol' }))
+    expect(() => collectPackageAliases(fixture)).toThrow('is claimed by')
+  })
+
   it('maps each package to its own source directory', () => {
     const aliases = collectPackageAliases()
     expect(aliases.length).toBeGreaterThan(100)

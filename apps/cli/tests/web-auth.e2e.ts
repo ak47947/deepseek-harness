@@ -14,7 +14,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url))
-const DSH_SOURCE_BIN = join(REPO_ROOT, 'apps/web/tests/fixtures/desktop-renderer-host.mjs')
+const DSH_SOURCE_BIN = join(REPO_ROOT, 'apps/cli/src/bin.ts')
 const TSX_LOADER = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
 
 interface RunningWeb {

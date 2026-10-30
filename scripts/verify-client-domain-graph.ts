@@ -1,5 +1,5 @@
 /**
- * Enforce intra-package domain layering inside `packages/client/*\/src/client/`.
+ * Enforce intra-package domain layering in Client plugin sources.
  * verify-module-graph covers package-level edges; this gate covers the
  * directory level: domain directories may import `contract/` and never each
  * other, and only the assembly point (`apply.ts` / `index.ts`) may import
@@ -14,11 +14,10 @@
  *   pnpm exec tsx scripts/verify-client-domain-graph.ts
  */
 
-import { globSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { globSync, readFileSync } from 'node:fs'
 import { join, posix, resolve, sep } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
-const CLIENT_DIR = join(root, 'packages/client')
 
 /** Directory names treated as the shared contract layer (importable by all). */
 const CONTRACT_DIRS = new Set(['contract'])
@@ -79,19 +78,22 @@ function checkPackage(pkgName: string, clientDir: string): Violation[] {
   return violations
 }
 
-function main(): void {
+/**
+ * Inspect domain imports in client packages and enterprise Client plugins.
+ * @param projectRoot - Repository root containing package source directories.
+ * @returns Invalid imports between sibling domains or from a non-assembly entry.
+ */
+export function collectClientDomainViolations(projectRoot: string): Violation[] {
   const violations: Violation[] = []
-  for (const pkg of readdirSync(CLIENT_DIR)) {
-    const clientDir = join(CLIENT_DIR, pkg, 'src/client')
-    try {
-      if (!statSync(clientDir).isDirectory()) continue
-    } catch {
-      // No client half in this package — nothing to layer-check.
-      continue
-    }
-    violations.push(...checkPackage(pkg, clientDir))
+  for (const clientDir of globSync(['packages/client/*/src/client', 'enterprise/*/src/client'], { cwd: projectRoot })) {
+    const packageDirectory = clientDir.split(sep).join('/').replace(/\/src\/client$/, '')
+    violations.push(...checkPackage(packageDirectory, join(projectRoot, clientDir)))
   }
+  return violations
+}
 
+function main(): void {
+  const violations = collectClientDomainViolations(root)
   if (violations.length > 0) {
     console.error(`verify-client-domain-graph: ${violations.length} violation(s):`)
     for (const v of violations) console.error(`  ${v.file} -> ${v.imported}\n    ${v.reason}`)

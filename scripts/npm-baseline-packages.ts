@@ -7,7 +7,6 @@ const PACKAGE_PATTERNS = [
   'vendor/*/package.json',
   'packages/*/*/package.json',
   'apps/*/package.json',
-  'backend/package.json',
 ] as const
 
 /**

@@ -1,0 +1,50 @@
+{
+  "name": "@deepseek-ai/dsh-enterprise-desktop-shell",
+  "version": "0.2.1-rc.3",
+  "private": true,
+  "type": "module",
+  "description": "Enterprise Desktop authentication and account lifecycle adapter",
+  "license": "MIT",
+  "scripts": {
+    "render:brand-assets": "tsx scripts/render-brand-assets.ts"
+  },
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./preload": {
+      "types": "./lib/types/preload.d.ts",
+      "default": "./lib/preload.js"
+    },
+    "./src/*": "./src/*",
+    "./branding": {
+      "types": "./lib/types/enterprise-branding.d.ts",
+      "default": "./lib/enterprise-branding.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-enterprise-protocol": "workspace:*",
+    "@deepseek-ai/dsh-atomic-write": "workspace:*",
+    "@deepseek-ai/dsh-credentials-local": "workspace:*",
+    "@deepseek-ai/cordis-plugin-include": "workspace:~",
+    "js-yaml": "^4.3.2",
+    "zod": "^4.4.3",
+    "@deepseek-ai/dsh-official-bundles": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~"
+  },
+  "devDependencies": {
+    "sharp": "0.35.5",
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-deepseek-account": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-settings-enterprise-account": "workspace:*",
+    "electron": "^44.7.0",
+    "@types/js-yaml": "^4.0.9"
+  }
+}

@@ -201,7 +201,7 @@ export function scanRepository(): DispatcherViolation[] {
   const files = [
     ...globSync('packages/*/*/src/**/*.ts', { cwd: root }),
     ...globSync('apps/*/src/**/*.ts', { cwd: root }),
-    ...globSync('backend/src/**/*.ts', { cwd: root }),
+    ...globSync('enterprise/*/src/**/*.ts', { cwd: root }),
   ]
   if (files.length === 0) throw new Error('verify-no-bare-dispatcher: scanned an empty corpus; the globs no longer match.')
   return files.flatMap(file => findDispatcherViolations(file, readFileSync(resolve(root, file), 'utf8')))

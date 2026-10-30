@@ -15,9 +15,8 @@ describe('Desktop sealed update feed', () => {
     expect(resolveUpdateFeed(TEST_FEED, 'darwin', 'arm64', undefined, true)).toBeUndefined()
   })
 
-  it('seals the release feed of an unsigned Windows installer when settings name one', () => {
-    expect(resolveUpdateFeed(TEST_FEED, 'win32', 'x64', undefined, true)?.publicUrl)
-      .toBe('https://updates.example.com/dsh-desk/0123456789abcdef0123456789abcdef/feeds/win-x64/')
+  it('keeps the upstream unsigned Windows installer free of a feed even with release settings', () => {
+    expect(resolveUpdateFeed(TEST_FEED, 'win32', 'x64', undefined, true)).toBeUndefined()
   })
 
   it('leaves an unsigned Windows installer without release settings free of a feed', () => {

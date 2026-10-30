@@ -316,20 +316,25 @@ export function clientSourceRoot(file: string): string | undefined {
   return index < 0 ? undefined : normalized.slice(0, index + marker.length - 1)
 }
 
-function sourceFiles(): string[] {
+/**
+ * Find product UI sources and the TypeScript companions of their Client components.
+ * @param projectRoot - Repository root containing client packages and applications.
+ * @returns Sorted repository-relative source paths, excluding declarations.
+ */
+export function clientUiSourceFiles(projectRoot: string): string[] {
   const clientComponentRoots = new Set(
-    globSync('packages/*/*/src/client/**/*.tsx', { cwd: root })
+    globSync(['packages/*/*/src/client/**/*.tsx', 'enterprise/*/src/client/**/*.tsx'], { cwd: projectRoot })
       .map(clientSourceRoot)
       .filter((clientRoot): clientRoot is string => clientRoot !== undefined),
   )
   return [...new Set([
-    ...globSync('packages/client/*/src/**/*.tsx', { cwd: root }),
-    ...globSync('packages/client/ui-*/src/**/*.{ts,tsx}', { cwd: root }),
+    ...globSync('packages/client/*/src/**/*.tsx', { cwd: projectRoot }),
+    ...globSync('packages/client/ui-*/src/**/*.{ts,tsx}', { cwd: projectRoot }),
     ...[...clientComponentRoots].flatMap(clientRoot =>
-      globSync(`${clientRoot}/**/*.{ts,tsx}`, { cwd: root })),
-    ...globSync('apps/web/src/**/*.{ts,tsx}', { cwd: root }),
-    ...globSync('apps/desktop/src/{main,update-coordinator}.{ts,tsx}', { cwd: root }),
-    ...globSync('apps/desktop/renderer/*.js', { cwd: root }),
+      globSync(`${clientRoot}/**/*.{ts,tsx}`, { cwd: projectRoot })),
+    ...globSync('apps/web/src/**/*.{ts,tsx}', { cwd: projectRoot }),
+    ...globSync('apps/desktop/src/{main,update-coordinator}.{ts,tsx}', { cwd: projectRoot }),
+    ...globSync('apps/desktop/renderer/*.js', { cwd: projectRoot }),
   ])]
     .map(file => file.replaceAll('\\', '/'))
     .filter(file => !file.endsWith('.d.ts'))
@@ -337,7 +342,7 @@ function sourceFiles(): string[] {
 }
 
 function main(): void {
-  const files = sourceFiles()
+  const files = clientUiSourceFiles(root)
   if (files.length < MINIMUM_CLIENT_UI_SOURCES) {
     throw new Error(
       `verify-client-ui-i18n: discovery narrowed to ${files.length} source file(s); expected at least ${MINIMUM_CLIENT_UI_SOURCES}.`,

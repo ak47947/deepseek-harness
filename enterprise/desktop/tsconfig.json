@@ -1,0 +1,36 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../packages/boot/app-boot"
+    },
+    {
+      "path": "../../packages/credentials/deepseek-account"
+    },
+    {
+      "path": "../protocol"
+    },
+    {
+      "path": "../../packages/util/atomic-write"
+    },
+    {
+      "path": "../../packages/credentials/credentials-local"
+    },
+    {
+      "path": "../../vendor/include"
+    },
+    {
+      "path": "../account/tsconfig.host.json"
+    },
+    {
+      "path": "../../packages/util/official-bundles"
+    }
+  ]
+}

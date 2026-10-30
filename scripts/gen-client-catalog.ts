@@ -30,7 +30,7 @@ const root = resolve(import.meta.dirname, '..')
 const OUT = 'packages/extensions/cordis-client-runner/src/client/slot-catalog.ts'
 
 /** Source globs: every workspace package's sources, `.tsx` included (a contract may live in one). */
-const SOURCE_GLOBS = ['packages/*/*/src/**/*.ts', 'packages/*/*/src/**/*.tsx']
+const SOURCE_GLOBS = ['packages/*/*/src/**/*.{ts,tsx}', 'enterprise/*/src/**/*.{ts,tsx}']
 
 /** Slot cardinalities the contract allows. */
 const KINDS = ['single', 'list', 'keyed', 'chain'] as const

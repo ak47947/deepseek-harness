@@ -38,7 +38,7 @@ const RELEASE_MANIFEST_GLOB = 'packages/!(experimental)/*/package.json'
 const POLICY_MANIFEST_GLOB = 'packages/*/*/package.json'
 const WORKSPACE_MANIFEST_GLOBS = [
   'apps/*/package.json',
-  'backend/package.json',
+  'enterprise/*/package.json',
   'packages/*/*/package.json',
   'vendor/*/package.json',
 ]

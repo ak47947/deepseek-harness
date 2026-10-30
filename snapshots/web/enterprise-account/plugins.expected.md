@@ -45,6 +45,11 @@
 - heading "Installed plugins" [level=3]
 - list:
   - listitem:
+    - button "View @deepseek-ai/dsh-enterprise-desktop": "@deepseek-ai/dsh-enterprise-desktop"
+    - text: Enterprise Desktop account, branding, and model selection over the standard Web profile
+    - status
+    - switch "Enable @deepseek-ai/dsh-enterprise-desktop" [checked]
+  - listitem:
     - button "View dsh-web-scaffold-defaults": dsh-web-scaffold-defaults
     - status
     - switch "Enable dsh-web-scaffold-defaults" [checked]

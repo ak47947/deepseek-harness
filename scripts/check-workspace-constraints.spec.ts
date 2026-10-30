@@ -424,10 +424,11 @@ describe('package payload constraints', () => {
     expect(checkWorkspaceManifest({ dir: 'apps/other-tool', manifest })).not.toEqual([])
   })
 
-  it('keeps the enterprise backend private only in its deployment-owned directory', () => {
-    const dir = 'backend'
+  it('keeps enterprise workspaces private with versions independent of the official release', () => {
+    const dir = 'enterprise/backend'
     const manifest = JSON.parse(readFileSync(new URL(`../${dir}/package.json`, import.meta.url), 'utf8')) as WorkspaceManifest['manifest']
     expect(checkWorkspaceManifest({ dir, manifest })).toEqual([])
+    expect(checkWorkspaceManifest({ dir, manifest: { ...manifest, version: '1.0.0' } })).toEqual([])
     expect(checkWorkspaceManifest({ dir, manifest: { ...manifest, private: false } })).toContainEqual(expect.stringContaining('must set "private": true'))
     expect(checkWorkspaceManifest({ dir: 'apps/other-backend', manifest })).not.toEqual([])
   })

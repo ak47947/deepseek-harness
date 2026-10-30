@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { enterpriseDevelopmentBranding } from '../../../enterprise/desktop/scripts/enterprise-package-environment.mjs'
 
 /** Workspace and runtime settings captured for Launch Services cold starts. */
 export interface DevelopmentAppOptions {
@@ -30,29 +31,31 @@ function quote(value: string): string { return `'${value.replaceAll("'", "'\\''"
  */
 export function prepareDevelopmentApp(options: DevelopmentAppOptions): string {
   const source = dirname(dirname(dirname(options.electron)))
-  const bundle = join(options.directory, 'atrix Dev.app')
-  const executable = join(bundle, 'Contents', 'MacOS', 'AtrixDev')
+  const enterprise = enterpriseDevelopmentBranding(options.enterpriseConfig)
+  const bundle = join(options.directory, enterprise?.bundleName ?? 'Harness Dev.app')
+  const executableName = enterprise?.executableName ?? 'HarnessDev'
+  const executable = join(bundle, 'Contents', 'MacOS', executableName)
   const stamp = join(bundle, 'Contents', 'Resources', 'dsh-development.json')
   const launcher = developmentLauncher(options, bundle)
-  const enterprise = JSON.parse(options.enterpriseConfig ?? '{}') as { productName?: string; appId?: string }
-  const icon = join(options.appRoot, 'resources', 'enterprise', 'icon.icns')
-  const identity = JSON.stringify({ ...options, launcher, icon: readFileSync(icon).toString('base64'), plist: readFileSync(join(source, 'Contents', 'Info.plist'), 'utf8') })
+  const identity = JSON.stringify({ ...options, launcher,
+    ...enterprise === undefined ? {} : { icon: readFileSync(enterprise.icon).toString('base64') },
+    plist: readFileSync(join(source, 'Contents', 'Info.plist'), 'utf8') })
   if (!existsSync(stamp) || readFileSync(stamp, 'utf8') !== identity) {
     rmSync(bundle, { recursive: true, force: true })
     execFileSync('/usr/bin/ditto', [source, bundle])
     const plist = join(bundle, 'Contents', 'Info.plist')
     const values = {
-      CFBundleIdentifier: `${enterprise.appId ?? 'com.atrix.desktop'}.dev.${createHash('sha256').update(options.appRoot).digest('hex').slice(0, 12)}`,
-      CFBundleName: enterprise.productName ?? 'Atrix Harness',
-      CFBundleDisplayName: enterprise.productName ?? 'Atrix Harness',
-      CFBundleExecutable: 'AtrixDev',
-      CFBundleIconFile: 'atrix.icns',
-      CFBundleURLTypes: [{ CFBundleURLName: enterprise.productName ?? 'Atrix Harness', CFBundleURLSchemes: ['dsh'], CFBundleTypeRole: 'Viewer' }],
+      CFBundleIdentifier: `${enterprise?.appId ?? 'com.deepseek.harness'}.dev.${createHash('sha256').update(options.appRoot).digest('hex').slice(0, 12)}`,
+      CFBundleName: enterprise?.productName ?? 'Harness Dev',
+      CFBundleDisplayName: enterprise?.productName ?? 'Harness Dev',
+      CFBundleExecutable: executableName,
+      ...enterprise === undefined ? {} : { CFBundleIconFile: enterprise.iconName },
+      CFBundleURLTypes: [{ CFBundleURLName: enterprise?.productName ?? 'DeepSeek Harness', CFBundleURLSchemes: ['dsh'], CFBundleTypeRole: 'Viewer' }],
     }
     for (const [key, value] of Object.entries(values)) {
       execFileSync('/usr/bin/plutil', ['-replace', key, '-json', JSON.stringify(value), plist])
     }
-    copyFileSync(icon, join(bundle, 'Contents', 'Resources', 'atrix.icns'))
+    if (enterprise !== undefined) copyFileSync(enterprise.icon, join(bundle, 'Contents', 'Resources', enterprise.iconName))
     writeFileSync(executable, launcher, { mode: 0o755 })
     writeFileSync(stamp, identity, { mode: 0o600 })
     execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', bundle], { stdio: 'pipe' })
@@ -75,6 +78,7 @@ export function developmentLauncher(options: DevelopmentAppOptions, bundle: stri
     DSH_DESKTOP_HOST_INSPECT_PORT: String(options.hostPort),
     DSH_DESKTOP_OPEN_DEVTOOLS: options.openDevtools,
     DSH_DESKTOP_PRIMARY_RUNTIME_DIR: options.primaryRuntime,
+    ...(options.enterpriseConfig === undefined ? {} : { DSH_DESKTOP_ENTERPRISE_CONFIG: options.enterpriseConfig }),
     ...(options.configurationFile === undefined ? {} : { DSH_DESKTOP_CONFIG_FILE: options.configurationFile }),
     ELECTRON_ENABLE_LOGGING: '1',
   }

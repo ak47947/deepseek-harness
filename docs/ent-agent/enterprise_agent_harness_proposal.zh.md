@@ -12,6 +12,8 @@ description: "企业桌面应用的需求与实施方案：服务器运行 Bette
 
 基础模式由后台下发供应商配置，模型请求从员工电脑直达供应商；精细化模式按需接入 LiteLLM，模型请求经过企业后台和网关，执行预算与用量管理。本地执行不表示数据不出本机：进入模型请求的文件内容、截图和工具结果仍会发送给模型供应商，精细化模式还会经过后台与 LiteLLM。
 
+企业实现集中在 [`enterprise/`](../../enterprise/README.zh.md)。企业 bundle 将 Host 和 Client 插件叠加在标准 DSH 组合上。共用桌面应用通过原生适配器处理认证和账号生命周期，并保留共用的窗口、Host 和工具实现。
+
 ## 目录
 
 - [一、首期范围](#initial-scope)
@@ -33,7 +35,7 @@ description: "企业桌面应用的需求与实施方案：服务器运行 Bette
 
 | 模块 | 首期要求 |
 |---|---|
-| 企业桌面 | 基于官方 `apps/desktop`，提供独立品牌、`appId`、企业签名、公证和更新源；复用本地运行时与工具 |
+| 企业桌面 | 复用共用的 `apps/desktop`，接入 `enterprise/desktop` 原生适配器和企业 bundle；保留独立品牌、`appId`、企业签名、公证和更新源 |
 | 远程认证 | Better Auth 仅在服务器运行；管理员在 `/admin` 使用企业邮箱密码登录，桌面支持 [OIDC 登录与账号开通](#oidc-sign-in-and-account-provisioning)及可选企业邮箱密码登录，无需本地认证服务或数据库 |
 | 独立管理后台 | 管理员使用普通浏览器访问服务器 `/admin`，无需安装或启动桌面端；管理员工、角色与模型配置 |
 | 本地数据 | 每个企业和员工账号使用独立 `DSH_HOME`；切换后保留原有项目与历史，禁止跨账号读取 |
@@ -50,11 +52,21 @@ description: "企业桌面应用的需求与实施方案：服务器运行 Bette
 
 | 组件 | 选择与职责 |
 |---|---|
-| 桌面端 | 官方 Electron 桌面应用及 `dsh` profile；不新增独立桌面发行版或智能体循环 |
+| 桌面端 | 共用的 Electron 应用和 `dsh` profile，通过企业插件和原生适配器接入；复用现有主程序与智能体循环 |
 | 认证 | Better Auth 服务端库及 Admin、Bearer、Generic OAuth 插件，处理管理员凭证、登录限速、会话、用户和角色；通过标准 OIDC 对接企业身份中心（如 Casdoor、Keycloak 或 Okta）完成桌面登录 |
 | 管理界面与业务接口 | 自研轻量管理页面与企业接口；复用 Better Auth 管理 API，负责模型分配和可选额度管理 |
 | 持久化 | PostgreSQL 保存认证数据与加密模型配置；启用网关时为 LiteLLM 使用独立数据库 |
 | 模型网关 | 可选的 LiteLLM 开源版，固定验证版本并使用管理 API；供应商凭证和员工虚拟 Key 保留在服务端 |
+
+### 企业包隔离
+
+[`enterprise/`](../../enterprise/README.zh.md) 持有企业源码、部署配置、图标、打包辅助脚本和测试。后端与 Desktop 仅共用 `enterprise/protocol` 的校验和身份类型，桌面端因此无需导入认证服务或数据库实现。
+
+`enterprise/bundle` 通过标准 profile 加载器选择企业行为，`enterprise/account` 提供账号设置、品牌插槽和智能体身份。获批模型数据和凭证引用写入账号 profile，复用现有模型、设置和凭证服务。后续企业 Host 和 Client 功能优先通过插件和 bundle 接入。
+
+`enterprise/desktop` 是 Electron 适配库，持有浏览器授权、安全保存的会话、账号专属路径、profile 准备、原生账号操作和企业发布资源。认证和账号准备校验必须先于 Host 启动；撤权、硬过期和账号切换控制 Host 停止。这些要求不能依赖工作区激活后才运行的可选插件。
+
+共用 Desktop 文件保留范围有限的产品操作和 preload 接口，企业地址、策略和品牌实现在企业所属代码中维护。只有接入确实需要时才增加通用接口，并同时验证普通和企业消费者。复用主程序与标准 profile，使后续同步上游时主要维护这些接口，避免维护重复应用代码。
 
 ### Better Auth 与管理界面
 
@@ -62,7 +74,7 @@ Better Auth 是认证实现，不是本应用完整的业务管理后台。其 [
 
 ### 发布与网关版本
 
-企业发行版使用企业自己的名称、图标、应用标识、签名证书和更新地址，复用[官方发布流程](../../apps/desktop/publishing/README.zh.md)与 [Windows 签名要求](../../apps/desktop/windows-signing/README.zh.md)。官方更新源不能覆盖企业客户端。LiteLLM 的版本、环境变量及已验证接口以[企业应用说明](../../backend/README.zh.md#enable-managed-mode)为准，不依赖其商业 SSO、SCIM 或管理审计功能。
+企业发行版使用企业自己的名称、图标、应用标识、签名证书和更新地址，复用[官方发布流程](../../apps/desktop/publishing/README.zh.md)与 [Windows 签名要求](../../apps/desktop/windows-signing/README.zh.md)。官方更新源不能覆盖企业客户端。LiteLLM 的版本、环境变量及已验证接口以[企业应用说明](../../enterprise/backend/README.zh.md#enable-managed-mode)为准，不依赖其商业 SSO、SCIM 或管理审计功能。
 
 -----
 
@@ -208,12 +220,13 @@ OIDC 接入由服务器配置显式启用（`DSH_ENTERPRISE_OIDC_ENABLED=1`）�
 
 先使用本机 Docker 部署，通过回环 IP 地址验证管理后台和桌面开发接入；企业邮箱密码登录的同机验证不要求域名。迁往服务器时，仅使用企业邮箱密码登录可配置服务器 IP 或域名及员工电脑信任的 HTTPS 证书；回环 HTTP 仅用于同机开发。真实 OIDC 联调及上线需在企业 OIDC 身份中心注册 Better Auth Generic OAuth 回调地址（`/api/auth/callback/enterprise-oidc`）并通过 HTTPS 提供企业服务源。
 
-企业服务集中维护在顶层 `backend/` 目录，统一通过 Docker Compose 部署。后台容器初始化服务 profile，并在容器内通过 `dsh --profile enterprise` 启动。Compose 同时提供 PostgreSQL 和静态更新源；使用企业已有 HTTPS 入口，或可选 Caddy 入口。精细化模式再叠加 LiteLLM 及独立网关数据库。部署命令、环境变量、桌面发布模板和备份方法以[企业应用部署说明](../../backend/README.zh.md)为准；服务器 `.env` 不分发给员工。
+企业服务集中维护在顶层 `enterprise/backend/` 目录，统一通过 Docker Compose 部署。后台容器初始化服务 profile，并在容器内通过 `dsh --profile enterprise` 启动。Compose 同时提供 PostgreSQL 和静态更新源；使用企业已有 HTTPS 入口，或可选 Caddy 入口。精细化模式再叠加 LiteLLM 及独立网关数据库。部署命令、环境变量、桌面发布模板和备份方法以[企业应用部署说明](../../enterprise/backend/README.zh.md)为准；服务器 `.env` 不分发给员工。
 
 运行一个后台容器。数据库、保持不变的加密密钥、更新产物及精细化数据库和 salt 均需备份；隔离恢复后验证身份、模型配置、网关关联和累计支出。首期不部署大模型或向量化任务，无需 GPU。容量按并发、持续时间、数据库和留存量实测，不按员工总数承诺 200～1000 人，也不在试点前增加副本。
 
 ### 必须验证的结果
 
+- 企业实现和资源集中在 `enterprise/`，共用桌面应用仅保留必要的产品接口及其消费者；标准 profile 和官方发布不引入企业行为。插件激活、profile 恢复和升级兼容性必须与下列认证及停机要求一起验证。
 - 服务器在没有桌面应用的环境独立运行；管理员从另一浏览器访问 `/admin` 通过邮箱密码完成登录及配置，未登录和普通员工不能读取或修改管理数据。
 - 员工桌面不需要 Better Auth 服务、数据库、服务器密钥或服务器 `.env`；配置的远程 HTTPS 地址同时用于网页登录、会话校验及模型配置获取，回环监听仅接收短期授权码。
 - 默认仅预建且明确绑定的员工可通过 OIDC 登录。启用自动开通前验证 IdP 拒绝未分配本应用的身份、访客及未经员工准入筛选的第三方身份；获准的新员工创建为 `role = user` 并继承默认模型。相同邮箱不得隐式关联，管理员 OIDC 登录及关闭员工密码登录后的直接密码请求均被拒绝。
@@ -243,4 +256,4 @@ OIDC 接入由服务器配置显式启用（`DSH_ENTERPRISE_OIDC_ENABLED=1`）�
 <a id="dev-note"></a>
 ## 开发备注
 
-本文是需求与验收参考，软件实现及运行方式由[企业应用说明](../../backend/README.zh.md)维护。源码和自动化检查只能证明其覆盖的行为；可访问的 HTTPS IP 地址或域名、证书信任、OIDC 身份中心配置与真实授权回调、企业签名、公证、更新发布、获批模型与办公任务、容量及恢复演练仍需在目标基础设施逐项验证，不能以本地测试通过替代上线验收。
+本文是需求与验收参考，软件实现及运行方式由[企业应用说明](../../enterprise/backend/README.zh.md)维护。源码和自动化检查只能证明其覆盖的行为；可访问的 HTTPS IP 地址或域名、证书信任、OIDC 身份中心配置与真实授权回调、企业签名、公证、更新发布、获批模型与办公任务、容量及恢复演练仍需在目标基础设施逐项验证，不能以本地测试通过替代上线验收。

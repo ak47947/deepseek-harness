@@ -22,8 +22,10 @@
     "apps/desktop/src/ipc.ts",
     "apps/desktop/src/update-overlay.ts",
     "apps/desktop/src/windows-layout.ts",
-    "apps/desktop/src/enterprise-branding.ts",
     "apps/desktop/tests/**/*.client.spec.tsx",
+    "enterprise/*/tests/**/*.client.spec.tsx",
+    "enterprise/*/tests/**/*.client.spec.ts",
+    "enterprise/desktop/src/enterprise-branding.ts",
     // Source-subpath test imports can arrive through workspace links whose
     // realpath semantics vary by host. Load package CSS declarations directly.
     "packages/client/*/src/css-modules.d.ts",
@@ -57,7 +59,7 @@
     "packages/client/*/tests/**/*.host.ts"
   ],
   "references": [
-    { "path": "./packages/client/ui-settings-enterprise-account/tsconfig.client.json" },
+    { "path": "./enterprise/account/tsconfig.client.json" },
     { "path": "./packages/experimental/client-ui-action-cards" },
     { "path": "./packages/experimental/client-ui-creation-recommendations" },
     { "path": "./packages/experimental/client-ui-plugin-recommendations" },

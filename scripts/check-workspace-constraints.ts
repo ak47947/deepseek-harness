@@ -37,6 +37,7 @@ const workspaceGlobs = [
   { dir: 'native', depth: 1 },
   { dir: 'native/system/packages', depth: 1 },
   { dir: 'apps', depth: 1 },
+  { dir: 'enterprise', depth: 1 },
 ] as const
 const vendoredPackages = new Set([
   '@deepseek-ai/cordis',
@@ -68,7 +69,7 @@ const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 const pluginMarketGeneratorDirectory = 'apps/plugin-market-generator'
 /**
  * Ordinary directories whose packages this repository publishes: one release member each. The reference plugin
- * market generator and company-hosted enterprise backend do not publish to npm.
+ * market generator does not publish to npm. Enterprise workspaces own independent private releases.
  */
 const standardReleaseMemberDirectory = new RegExp(
   `^(?:packages/(?!experimental/)[^/]+/[^/]+|apps/(?!desktop(?:-host)?$|${pluginMarketGeneratorDirectory.slice('apps/'.length)}$)[^/]+|vendor/[^/]+)$`,
@@ -483,7 +484,7 @@ export function checkDshFamilyVersion(manifest: PackageManifest, expected: strin
 export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): string[] {
   const errors = checkExperimentalManifest({ dir, manifest })
   const label = manifest.name ?? dir
-  const familyVersionError = checkDshFamilyVersion(manifest, repositoryVersion)
+  const familyVersionError = dir.startsWith('enterprise/') ? undefined : checkDshFamilyVersion(manifest, repositoryVersion)
   if (familyVersionError !== undefined) errors.push(familyVersionError)
   const isNativePackageDir = dir.startsWith('native/system/packages/')
   const isPublicNativePackage = isNativePackageDir

@@ -299,7 +299,7 @@ export function browserFaceSources(projectRoot: string = root): string[] {
     for (const file of faceSources) add(relative(projectRoot, file).split(sep).join('/'))
   }
 
-  for (const file of globSync('packages/*/*/src/client/**/*.{ts,tsx}', { cwd: projectRoot })) {
+  for (const file of globSync(['packages/*/*/src/client/**/*.{ts,tsx}', 'enterprise/*/src/client/**/*.{ts,tsx}'], { cwd: projectRoot })) {
     add(relative(projectRoot, resolve(projectRoot, file)).split(sep).join('/'))
   }
 

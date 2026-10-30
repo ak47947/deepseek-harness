@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write enterprise/backend/README.md
+/:
+  en: 55102907c3ced1d9
+  zh: fcebc89043c9c81b
+/enterprise-accounts-and-model-provisioning:
+  en: 1604b824f5ddcfc0
+  zh: d3a47b13eb16e28e
+/enterprise-accounts-and-model-provisioning/summary:
+  en: 0010b01491b8d2dd
+  zh: 3911fe280b7d0be0
+/enterprise-accounts-and-model-provisioning/table-of-contents:
+  en: 04ad6f718a0b3245
+  zh: 02c8ea9155d5ba9f
+/enterprise-accounts-and-model-provisioning/run-the-service:
+  en: a4205471355efb26
+  zh: f458bc8bedaec580
+/enterprise-accounts-and-model-provisioning/manage-employees-and-models:
+  en: 69b6d9e66f5614db
+  zh: 7f7c02c0ddae2e00
+/enterprise-accounts-and-model-provisioning/enable-oidc-sign-in:
+  en: 904911b51139fb7a
+  zh: 34e5f116098414c5
+/enterprise-accounts-and-model-provisioning/connect-enterprise-desktop:
+  en: 949e9b3c1c6f429e
+  zh: 0802a0afb0c81c9b
+/enterprise-accounts-and-model-provisioning/run-locally-with-docker:
+  en: 908e6d5d8590144c
+  zh: fa3135f00e5355d3
+/enterprise-accounts-and-model-provisioning/deploy-and-back-up:
+  en: f3c2e9612ac5eb0f
+  zh: 27deab0d6ec39d1d
+/enterprise-accounts-and-model-provisioning/enable-managed-mode:
+  en: ab50308eeffcd0b9
+  zh: 389035874da5776a
+/enterprise-accounts-and-model-provisioning/security-and-failure-behavior:
+  en: 9fac22acfac9f22c
+  zh: 8fa01fcf09ec6b7e
+/enterprise-accounts-and-model-provisioning/verification:
+  en: ebdafc093d4ac477
+  zh: 04de87a54b527e30
+/enterprise-accounts-and-model-provisioning/dev-note:
+  en: 8fef604c432faa7a
+  zh: d00930567649b7d5

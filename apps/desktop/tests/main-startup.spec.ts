@@ -20,9 +20,9 @@ type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
 const fileDrag = vi.hoisted(() => ({ dispose: vi.fn<() => Promise<void>>(), install: vi.fn() }))
 vi.mock('../src/file-drag.ts', () => ({ installDesktopFileDrag: () => { fileDrag.install(); return fileDrag.dispose } }))
 
-vi.mock('../src/desktop-configuration.ts', async () => {
-  const { resolveEnterpriseDesktopConfig } = await import('../src/enterprise-config.ts')
-  return { readDesktopConfiguration: () => resolveEnterpriseDesktopConfig(process.env.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined
+vi.mock('../../../enterprise/desktop/src/desktop-configuration.ts', async () => {
+  const { resolveEnterpriseDesktopConfig } = await import('../../../enterprise/desktop/src/enterprise-config.ts')
+  return { readDesktopConfiguration: () => process.env.DSH_TEST_DESKTOP_UPSTREAM === '1' ? undefined : resolveEnterpriseDesktopConfig(process.env.DSH_DESKTOP_ENTERPRISE_CONFIG === undefined
     ? { appId: 'test.enterprise.desktop', enterpriseName: 'DeepSeek Harness', productName: 'DeepSeek Harness', origin: 'https://enterprise.example.test' }
     : JSON.parse(process.env.DSH_DESKTOP_ENTERPRISE_CONFIG), true) }
 })
@@ -403,7 +403,7 @@ vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: class
   readonly install = harness.updateInstall
   readonly dispose = vi.fn()
 } }))
-vi.mock('../src/update-capability.ts', () => ({ desktopUpdateSupported: () => true }))
+vi.mock('../../../enterprise/desktop/src/update-capability.ts', () => ({ desktopUpdateSupported: () => true }))
 vi.mock('../src/platform-view.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/platform-view.ts')>(),
   DesktopPlatformView: class {
@@ -473,6 +473,7 @@ beforeEach(async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {})
   vi.spyOn(console, 'info').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.stubEnv('DSH_TEST_DESKTOP_UPSTREAM', undefined)
   vi.stubEnv('DSH_DESKTOP_PNPM_ENTRY', 'test-pnpm')
   vi.stubEnv('DSH_DESKTOP_DSH_DIR', 'test-runtime')
   vi.stubEnv('DSH_DESKTOP_PRIMARY_RUNTIME_DIR', 'test-primary-runtime')
@@ -484,9 +485,9 @@ beforeEach(async () => {
   vi.stubEnv('DSH_DESKTOP_UPDATE_JOURNAL_DIR', undefined)
   vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
   harness.analyticsEnabled = true
-  const { DesktopEnterpriseSession } = await import('../src/enterprise-session.ts')
-  const profile = await import('../src/enterprise-profile.ts')
-  const { enterpriseSessionSchema } = await import('@deepseek-ai/dsh-enterprise/protocol')
+  const { DesktopEnterpriseSession } = await import('../../../enterprise/desktop/src/enterprise-session.ts')
+  const profile = await import('../../../enterprise/desktop/src/enterprise-profile.ts')
+  const { enterpriseSessionSchema } = await import('@deepseek-ai/dsh-enterprise-protocol')
   const account = enterpriseSessionSchema.parse({
     enterpriseId: 'company', userId: 'alice', name: 'Alice', email: 'alice@example.test', role: 'user',
     expiresAt: '2099-01-01T00:00:00.000Z', provisioning: {
@@ -502,8 +503,8 @@ beforeEach(async () => {
   vi.spyOn(DesktopEnterpriseSession.prototype, 'prepareAndCommit').mockImplementation(prepare => prepare())
   vi.spyOn(DesktopEnterpriseSession.prototype, 'startSynchronization').mockImplementation(() => {})
   vi.spyOn(profile, 'prepareEnterpriseProfile').mockResolvedValue()
+  vi.spyOn(profile, 'assertEnterpriseProfile').mockImplementation(() => {})
   vi.spyOn(profile, 'writeEnterpriseCredentials').mockResolvedValue()
-  vi.spyOn(profile, 'resolveEnterpriseClientEntry').mockReturnValue('/test/enterprise-account/index.js')
 })
 
 afterEach(async () => {
@@ -522,12 +523,29 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it('retains upstream startup without enterprise account preparation or enterprise IPC', async () => {
+    vi.stubEnv('DSH_TEST_DESKTOP_UPSTREAM', '1')
+    const profile = await import('../../../enterprise/desktop/src/enterprise-profile.ts')
+    await readyForUpdate()
+    expect(profile.prepareEnterpriseProfile).not.toHaveBeenCalled()
+    expect(harness.handlers.has('dsh-enterprise:account')).toBe(false)
+  })
+
+  it('refuses Host startup when its required enterprise bundle cannot load', async () => {
+    const profile = await import('../../../enterprise/desktop/src/enterprise-profile.ts')
+    vi.mocked(profile.assertEnterpriseProfile).mockImplementation(() => { throw new Error('Required enterprise bundle is unavailable') })
+    await import('../src/main.ts')
+    harness.prepared.resolve()
+    await harness.dialogShown.promise
+    expect(harness.hosts).toHaveLength(0)
+  })
+
   it('refuses enterprise welcome skip without constructing or starting a Host', async () => {
     harness.app.isPackaged = false
     vi.stubEnv('DSH_DESKTOP_ENTERPRISE_CONFIG', JSON.stringify({
       appId: 'test.enterprise.desktop', productName: 'Enterprise test', origin: 'https://enterprise.example.test',
     }))
-    const { DesktopEnterpriseSession } = await import('../src/enterprise-session.ts')
+    const { DesktopEnterpriseSession } = await import('../../../enterprise/desktop/src/enterprise-session.ts')
     vi.spyOn(DesktopEnterpriseSession.prototype, 'restore').mockResolvedValue(false)
     await import('../src/main.ts')
     await vi.waitFor(() => { expect(harness.handlers.has(WELCOME_IPC.skip)).toBe(true) })
@@ -545,7 +563,7 @@ describe('desktop main startup', () => {
     }))
     const restoring = Promise.withResolvers<undefined>()
     const restored = Promise.withResolvers<boolean>()
-    const { DesktopEnterpriseSession } = await import('../src/enterprise-session.ts')
+    const { DesktopEnterpriseSession } = await import('../../../enterprise/desktop/src/enterprise-session.ts')
     vi.spyOn(DesktopEnterpriseSession.prototype, 'restore').mockImplementation(() => {
       restoring.resolve(undefined)
       return restored.promise
@@ -580,9 +598,9 @@ describe('desktop main startup', () => {
     vi.stubEnv('DSH_DESKTOP_ENTERPRISE_CONFIG', JSON.stringify({
       appId: 'test.enterprise.desktop', productName: 'Enterprise test', origin: 'http://127.0.0.1:3090',
     }))
-    const { DesktopEnterpriseSession } = await import('../src/enterprise-session.ts')
-    const profile = await import('../src/enterprise-profile.ts')
-    const { enterpriseSessionSchema } = await import('@deepseek-ai/dsh-enterprise/protocol')
+    const { DesktopEnterpriseSession } = await import('../../../enterprise/desktop/src/enterprise-session.ts')
+    const profile = await import('../../../enterprise/desktop/src/enterprise-profile.ts')
+    const { enterpriseSessionSchema } = await import('@deepseek-ai/dsh-enterprise-protocol')
     const account = enterpriseSessionSchema.parse({
       enterpriseId: 'company', userId: 'alice', name: 'Alice', email: 'alice@example.test', role: 'user',
       expiresAt: '2099-01-01T00:00:00.000Z', provisioning: {
@@ -599,8 +617,8 @@ describe('desktop main startup', () => {
     vi.spyOn(DesktopEnterpriseSession.prototype, 'prepareAndCommit').mockImplementation(prepare => prepare())
     vi.spyOn(DesktopEnterpriseSession.prototype, 'startSynchronization').mockImplementation(() => {})
     vi.spyOn(profile, 'prepareEnterpriseProfile').mockResolvedValue()
+    vi.spyOn(profile, 'assertEnterpriseProfile').mockImplementation(() => {})
     vi.spyOn(profile, 'writeEnterpriseCredentials').mockResolvedValue()
-    vi.spyOn(profile, 'resolveEnterpriseClientEntry').mockReturnValue('/test/enterprise-account/index.js')
     const host = await readyForUpdate()
     expect(host.packageManager).toMatchObject({ pnpm: 'test-pnpm' })
     await Promise.resolve(invoke(DESKTOP_IPC.boot))
@@ -734,7 +752,7 @@ describe('desktop main startup', () => {
     expect({ menu: [{ label: about!.label, role: about!.role }, separator], options: { ...options, iconPath: '<app icon>' } })
       .toEqual(expected[`${platform}:${locale}`])
     expect(options.iconPath).toBe(packaged ? join('desktop-test-resources', 'icon.png')
-      : join('desktop-test-app', 'resources', 'enterprise', 'icon-windows.png'))
+      : join('desktop-test-app', '..', '..', 'enterprise', 'desktop', 'resources', 'icon-windows.png'))
     if (platform !== 'win32') { expect(about!.click).toBeUndefined(); return }
     // Windows reuses the dimmed update dialog because Electron's fallback is a bare message box.
     harness.dialog.showMessageBox.mockResolvedValueOnce({ response: 0 })

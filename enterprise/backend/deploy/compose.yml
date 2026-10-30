@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:17.6-bookworm
+    environment:
+      POSTGRES_USER: enterprise
+      POSTGRES_DB: enterprise
+      POSTGRES_PASSWORD: ${ENTERPRISE_POSTGRES_PASSWORD:?Configure ENTERPRISE_POSTGRES_PASSWORD}
+    volumes: ["enterprise-db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U enterprise -d enterprise"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  backend:
+    build:
+      context: ../../..
+      dockerfile: enterprise/backend/deploy/Dockerfile
+      args:
+        DSH_CLIENT_COMMIT_HASH: ${DSH_CLIENT_COMMIT_HASH:?Configure the source revision from git rev-parse HEAD}
+    env_file: .env
+    environment:
+      DSH_ENTERPRISE_HOST: 0.0.0.0
+      DSH_ENTERPRISE_PORT: 3090
+      DATABASE_URL: postgresql://enterprise:${ENTERPRISE_POSTGRES_PASSWORD:?Configure ENTERPRISE_POSTGRES_PASSWORD}@postgres:5432/enterprise
+    ports: ["127.0.0.1:3090:3090"]
+    volumes: ["enterprise-runtime:/data"]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - --input-type=module
+        - -e
+        - "const response = await fetch('http://127.0.0.1:3090/health', { signal: AbortSignal.timeout(4000) }); process.exit(response.ok ? 0 : 1)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+  updates:
+    image: nginx:1.28.0-alpine
+    ports: ["127.0.0.1:3091:80"]
+    volumes:
+      - ./updates:/usr/share/nginx/html:ro
+      - ./updates.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+volumes:
+  enterprise-db:
+  enterprise-runtime:

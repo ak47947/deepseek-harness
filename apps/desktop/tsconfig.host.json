@@ -39,16 +39,13 @@
       "path": "../../packages/util/file-drag"
     },
     {
-      "path": "../../backend"
-    },
-    {
       "path": "../../vendor/include"
     },
     {
-      "path": "../../packages/client/ui-settings-enterprise-account/tsconfig.host.json"
+      "path": "../../packages/credentials/credentials-local"
     },
     {
-      "path": "../../packages/credentials/credentials-local"
+      "path": "../../enterprise/desktop"
     }
   ],
   "exclude": [

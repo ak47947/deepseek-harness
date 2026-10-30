@@ -1,6 +1,6 @@
 ---
 kind: upgrade-guide
-description: Desktop starts as the configured Atrix Harness enterprise application, and standalone Web launch commands are disabled.
+description: Enterprise development and deployment files move into the independent enterprise directory.
 ---
 
 # Enterprise desktop entry
@@ -9,14 +9,14 @@ English | [中文](guide.zh.md)
 
 ## Change
 
-Desktop no longer starts the personal DSH application when enterprise settings are absent. The desktop configuration file supplies enterprise settings over defaults: enterprise name and product name `Atrix Harness`, application ID `com.atrix.desktop`, and service origin `http://127.0.0.1:3090`. The default startup opens enterprise sign-in before starting a workspace Host.
+Enterprise customizations are maintained under `enterprise/`: the backend, account protocol, account UI plugin, Desktop bundle, and Electron adapter. Desktop uses explicit enterprise settings; an unconfigured shell retains the standard account flow. Standalone Web launches remain available.
 
-Standalone `dsh web` and `dsh --profile web` launches are disabled. The root `start:web`, `dev:web`, `make web`, and `make dev-web` commands are removed. Desktop retains its internal browser renderer and local Host transport.
+The enterprise account profile loads its required bundle before starting the Host. Existing account directory IDs, encrypted login data, conversation history, and personal model settings remain unchanged.
 
 ## Migration
 
-1. Edit `apps/desktop/config/desktop.json` before development startup. Its `enterprise` object accepts `enterpriseName`, `productName`, `appId`, and `origin`, plus synchronization and request deadlines. Omitted fields retain defaults.
-2. Start with `pnpm run dev:desktop`, or use `pnpm run start:desktop` after building. Neither command needs enterprise environment variables for the default local setup.
-3. Configure the backend's local published port as `3090`. Set `DSH_ENTERPRISE_LOCAL_PORT` only when a different host port is needed, and set the same origin in the desktop file.
-4. For installed Desktop, edit `<appData>/com.atrix.desktop/desktop/config.json` and restart. `DSH_DESKTOP_CONFIG_FILE` selects another configuration file. Use HTTPS for a remote service; HTTP is limited to loopback development and the default local service.
-5. Confirm the application displays the enterprise sign-in page and the configured product name. A workspace opens only after enterprise authentication succeeds.
+1. Use `enterprise/backend/deploy/` for Compose files and deployment templates. Preserve the existing Compose project name, environment file, and named volumes.
+2. Edit `enterprise/desktop/config/desktop.json` for development, then use `pnpm run dev:desktop` or `pnpm run start:desktop`. Use their `:upstream` counterparts to launch the unconfigured shell.
+3. Keep installed enterprise settings in `<appData>/com.atrix.desktop/desktop/config.json`, or retain an existing `DSH_DESKTOP_CONFIG_FILE` selection. Use the same enterprise application ID and service origin.
+4. Install the matching enterprise runtime, including its composition bundle. Account preparation adds the bundle to the existing account profile and retains personal configuration. A missing bundle prevents Host startup.
+5. Sign in with the same account and confirm that existing projects and conversations remain available, enterprise models load, and sign-out stops the Host.

@@ -44,7 +44,7 @@ it('configures MCP on a live profile, restores it on restart, and removes its to
     name: new URL('./fixtures/creator-plugin-manager.mjs', import.meta.url).href, config: { bundle },
   }] }]))
   const start = async () => {
-    const child = spawn(process.execPath, [join(repo, 'apps/web/tests/fixtures/desktop-renderer-host.mjs'), '--profile', 'web', '--patch', patch,
+    const child = spawn(process.execPath, [join(repo, 'apps/cli/lib/bin.js'), '--profile', 'web', '--patch', patch,
       '--port', '0', '--no-open'], { cwd: join(root, 'workspace'),
       env: { ...process.env, DSH_HOME: join(root, 'home'), DSH_AGENTS_HOME: join(root, 'agents'),
         DSH_TELEMETRY_DISABLED: '1', DEEPSEEK_API_KEY: 'keyless-no-model-calls' },

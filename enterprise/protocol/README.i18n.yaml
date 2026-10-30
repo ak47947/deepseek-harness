@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write enterprise/protocol/README.md
+/:
+  en: 5171aa09d625944f
+  zh: 473eb9e9affaa7f9
+/deepseek-ai-dsh-enterprise-protocol:
+  en: 27f382158cbf44e0
+  zh: 7867a114f4d7c3d2
+/deepseek-ai-dsh-enterprise-protocol/summary:
+  en: 1bf6a300e5077f9d
+  zh: 0ded49346ad68f52
+/deepseek-ai-dsh-enterprise-protocol/table-of-contents:
+  en: 80b31a934611cb4a
+  zh: 39ffa92338cbfabd
+/deepseek-ai-dsh-enterprise-protocol/use-this-package:
+  en: 68c505a90382f226
+  zh: d65ae10dff175536
+/deepseek-ai-dsh-enterprise-protocol/understand-the-implementation:
+  en: 711c4ef391fa9015
+  zh: 6fb8d62c7a29dd94
+/deepseek-ai-dsh-enterprise-protocol/further-exploration:
+  en: 13108bd7f059311f
+  zh: 43da7f4546954e01
+/deepseek-ai-dsh-enterprise-protocol/known-limitations-and-deferred-work:
+  en: 27355be220f9efe8
+  zh: f3238dd98d21e16b
+/deepseek-ai-dsh-enterprise-protocol/dev-note:
+  en: 5de1d6304e00c58f
+  zh: 3fee785f424f1018

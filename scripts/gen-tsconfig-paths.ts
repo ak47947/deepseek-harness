@@ -18,8 +18,8 @@
  * @module scripts/gen-tsconfig-paths
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { readFileSync, writeFileSync, existsSync, globSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -57,27 +57,23 @@ function packageName(manifest: string): string | undefined {
 
 /** One workspace package directory and the name its manifest declares. */
 interface WorkspacePackage {
-  readonly group: string
   readonly directory: string
   readonly name: string
+  readonly generated: boolean
 }
 
 /**
- * Walk `packages/<group>/<directory>` once, in a stable order.
+ * Read library, plugin, and enterprise workspace manifests in a stable order.
+ * @param root - Repository or fixture root.
  * @returns Every directory whose manifest names a `@deepseek-ai/dsh-` package and that carries `src`.
  */
-function workspacePackages(): WorkspacePackage[] {
-  const packages = join(ROOT, 'packages')
+function workspacePackages(root: string): WorkspacePackage[] {
   const found: WorkspacePackage[] = []
-  for (const group of readdirSync(packages).sort()) {
-    const groupDir = join(packages, group)
-    if (!statSync(groupDir).isDirectory()) continue
-    for (const directory of readdirSync(groupDir).sort()) {
-      const packageDir = join(groupDir, directory)
-      const name = packageName(join(packageDir, 'package.json'))
-      if (name === undefined || !name.startsWith(PREFIX)) continue
-      if (existsSync(join(packageDir, 'src'))) found.push({ group, directory, name })
-    }
+  for (const manifest of globSync(['packages/*/*/package.json', 'enterprise/*/package.json'], { cwd: root }).sort()) {
+    const directory = dirname(manifest).replaceAll('\\', '/')
+    const name = packageName(join(root, manifest))
+    if (name === undefined || !name.startsWith(PREFIX) || !existsSync(join(root, directory, 'src'))) continue
+    found.push({ directory, name, generated: directory.startsWith('enterprise/') || name === `${PREFIX}${basename(directory)}` })
   }
   return found
 }
@@ -89,26 +85,28 @@ function workspacePackages(): WorkspacePackage[] {
  * so it only ever resolved a package whose declared name is exactly
  * `@deepseek-ai/dsh-<directory>`. Packages named after something other than
  * their directory already carry a hand-written alias and are skipped here.
+ * Enterprise package names are mapped independently of their product-owned directory names.
  *
+ * @param root - Repository or fixture root; defaults to this checkout.
  * @returns Aliases sorted by specifier.
  * @throws When two package directories claim one specifier, which the removed
  * wildcards resolved by group order and an explicit map cannot express.
  */
-export function collectPackageAliases(): PackageAlias[] {
+export function collectPackageAliases(root: string = ROOT): PackageAlias[] {
   const bySpecifier = new Map<string, PackageAlias & { directory: string }>()
-  for (const { group, directory, name } of workspacePackages()) {
-    if (name !== `${PREFIX}${directory}`) continue
+  for (const { directory, name, generated } of workspacePackages(root)) {
+    if (!generated) continue
     const previous = bySpecifier.get(name)
     if (previous !== undefined) {
       throw new Error(
-        `gen-tsconfig-paths: ${name} is claimed by packages/${previous.directory} and packages/${group}/${directory}; `
+        `gen-tsconfig-paths: ${name} is claimed by ${previous.directory} and ${directory}; `
         + 'an explicit alias cannot express the group-order tiebreak the wildcard used.',
       )
     }
     bySpecifier.set(name, {
       specifier: name,
-      source: `./packages/${group}/${directory}/src`,
-      directory: `${group}/${directory}`,
+      source: `./${directory}/src`,
+      directory,
     })
   }
   return [...bySpecifier.values()]
@@ -124,10 +122,11 @@ export function collectPackageAliases(): PackageAlias[] {
  * alias can — but they still have to be mapped by something, because deleting
  * the group wildcards removed the fallback that used to catch them.
  *
+ * @param root - Repository or fixture root; defaults to this checkout.
  * @returns Declared names of every `@deepseek-ai/dsh-` package carrying a `src` directory.
  */
-export function collectPackageNames(): string[] {
-  return workspacePackages()
+export function collectPackageNames(root: string = ROOT): string[] {
+  return workspacePackages(root)
     .map(({ name }) => name)
     .sort((left, right) => left.localeCompare(right))
 }
