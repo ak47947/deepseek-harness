@@ -2,13 +2,21 @@
 export { adminStyles } from './web-styles.ts'
 export { adminScript } from './web-script.ts'
 
-/** Accessible administration document; visible copy is populated from the browser locale dictionary. */
-export const adminDocument = `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Enterprise administration</title><link rel="stylesheet" href="/admin/app.css"><script src="/admin/app.js" defer></script></head>
+/**
+ * Accessible administration document; visible copy is populated from the browser locale dictionary.
+ * @param productName - Configured deployment display name.
+ * @returns Fully rendered administration page shell.
+ */
+export function adminDocument(productName = 'DeepSeek Harness'): string {
+  const escape = (value: string) =>
+    value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
+  const name = escape(productName)
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name}</title><link rel="stylesheet" href="/admin/app.css"><script src="/admin/app.js" defer></script></head>
 <body>
 <a class="skip-link" href="#content" data-copy="skipContent"></a>
 <section id="login" class="login-screen">
-  <div class="login-brand"><span class="brand-icon" data-icon="command"></span><span>DeepSeek Harness</span></div>
+  <div class="login-brand"><span class="brand-icon" data-icon="command"></span><span>${name}</span></div>
   <div class="login-card"><span class="eyebrow" data-copy="enterpriseConsole"></span><h1 data-copy="welcome"></h1><p class="muted" data-copy="signInDescription"></p>
     <form id="login-form"><label><span data-copy="email"></span><input name="email" type="email" autocomplete="username" required></label><label><span data-copy="password"></span><input name="password" type="password" autocomplete="current-password" required></label><button class="primary full" data-copy="signIn"></button></form>
     <p class="login-footnote" data-copy="adminOnly"></p>
@@ -17,7 +25,7 @@ export const adminDocument = `<!doctype html>
 <div id="workspace" class="app-shell" hidden>
   <button id="sidebar-backdrop" class="sidebar-backdrop" tabindex="-1" data-label="closeMenu" hidden></button>
   <aside id="sidebar" class="sidebar" data-label="mainNavigation">
-    <a class="brand" href="#overview" aria-label="DeepSeek Harness"><span class="brand-icon" data-icon="command"></span><span class="brand-name">DeepSeek Harness<small data-copy="enterpriseWorkspace"></small></span><span class="brand-chevron" data-icon="chevrons"></span></a>
+    <a class="brand" href="#overview" aria-label="${name}"><span class="brand-icon" data-icon="command"></span><span class="brand-name">${name}<small data-copy="enterpriseWorkspace"></small></span><span class="brand-chevron" data-icon="chevrons"></span></a>
     <span class="nav-label" data-copy="workspaceLabel"></span>
     <nav id="navigation">
       <a href="#overview" data-route="overview"><span data-icon="dashboard"></span><span data-copy="overview"></span></a>
@@ -47,10 +55,11 @@ export const adminDocument = `<!doctype html>
       <section id="page-departments" class="page-view" hidden><div id="department-stats" class="stats-grid three"></div><div class="filterbar"><label class="search-field"><span data-icon="search"></span><input id="department-search" type="search" data-label="searchDepartments" data-placeholder="searchDepartments"></label><button id="expand-departments" class="secondary" data-copy="expandAll"></button><button id="collapse-departments" class="secondary" data-copy="collapseAll"></button></div><div class="card table-card"><div class="table-scroll"><table><thead><tr><th data-copy="departmentName"></th><th data-copy="description"></th><th data-copy="members"></th><th class="actions-heading" data-copy="actions"></th></tr></thead><tbody id="departments"></tbody></table></div><div id="department-empty" class="empty-state" hidden><span data-icon="building"></span><h3 data-copy="noDepartments"></h3><p class="muted" data-copy="departmentEmptyDescription"></p><button id="empty-create-department" class="primary" data-copy="createDepartment"></button></div></div></section>
       <section id="page-models" class="page-view" hidden><div class="card platform-default"><div class="card-heading"><div><h2 data-copy="platformDefault"></h2><p class="muted" data-copy="platformDefaultDescription"></p><p id="platform-default-summary"></p></div><button id="configure-platform-default" class="secondary" data-copy="configurePlatformDefault"></button></div></div><div id="model-stats" class="stats-grid three"></div><div class="filterbar"><label class="search-field"><span data-icon="search"></span><input id="model-search" type="search" data-label="searchModels" data-placeholder="searchModels"></label></div><div class="card table-card"><div class="table-scroll"><table><thead><tr><th data-copy="employee"></th><th data-copy="assignedModels"></th><th data-copy="endpoint"></th><th data-copy="defaultModel"></th><th class="actions-heading" data-copy="actions"></th></tr></thead><tbody id="model-assignments"></tbody></table></div><div id="model-empty" class="empty-state" hidden><span data-icon="boxes"></span><h3 data-copy="noModelResults"></h3><p class="muted" data-copy="modelEmptyDescription"></p></div></div><div class="mode-note standalone"><span data-icon="info"></span><p id="model-mode"></p></div></section>
       <section id="page-usage" class="page-view" hidden><section id="managed" class="card" hidden><div class="card-heading"><div><h2 data-copy="budgetUsage"></h2><p class="muted" data-copy="usageDescription"></p></div></div><form id="budget-form" class="form-grid padded"><label><span data-copy="employee"></span><select name="userId" required></select></label><label><span data-copy="monthlyBudget"></span><input name="maxBudget" type="number" min="0" step="0.01" required></label><button class="primary" data-copy="saveBudget"></button></form><div class="section-divider"></div><form id="usage-filters" class="form-grid padded"><label><span data-copy="startDate"></span><input name="start" type="date" required></label><label><span data-copy="endDate"></span><input name="end" type="date" required></label><label><span data-copy="modelFilter"></span><input name="model"></label><label><span data-copy="page"></span><input name="page" type="number" min="1" max="100000" value="1" required></label><button id="usage" class="secondary" data-copy="readUsage"></button></form><div id="usage-result" class="padded muted" data-copy="usagePrompt"></div></section></section>
-      <footer class="page-footer"><span>DeepSeek Harness<span class="footer-dot">·</span><span data-copy="enterpriseConsole"></span></span><span id="footer-mode"></span></footer>
+      <footer class="page-footer"><span>${name}<span class="footer-dot">·</span><span data-copy="enterpriseConsole"></span></span><span id="footer-mode"></span></footer>
     </main>
   </div>
 </div>
 <dialog id="editor" aria-labelledby="editor-title" aria-describedby="editor-description" class="dialog"><div class="dialog-heading"><div><h2 id="editor-title"></h2><p id="editor-description" class="muted"></p></div><button type="button" class="icon-button" data-close="editor" data-label="close"><span data-icon="x"></span></button></div><form id="editor-form"><div id="editor-fields" class="dialog-body"></div><p id="editor-notice" class="dialog-notice" role="alert" hidden></p><div class="dialog-footer"><button type="button" class="secondary" data-close="editor" data-copy="cancel"></button><button id="editor-save" class="primary" data-copy="save"></button></div></form></dialog>
 <dialog id="assignment" aria-labelledby="assignment-title" class="dialog wide"><div class="dialog-heading"><div><h2 id="assignment-title"></h2><p class="muted" data-copy="assignmentDescription"></p></div><button type="button" class="icon-button" data-close="assignment" data-label="close"><span data-icon="x"></span></button></div><form id="assignment-form"><div class="dialog-body"><div class="form-grid"><label><span data-copy="endpoint"></span><input name="baseURL" type="url" required></label><label><span data-copy="protocol"></span><select name="api"><option value="openai-completions">OpenAI chat completions</option><option value="openai-responses">OpenAI responses</option><option value="anthropic-messages">Anthropic messages</option></select></label></div><label id="key-field"><span data-copy="providerKey"></span><input name="apiKey" type="password" autocomplete="off"></label><datalist id="gateway-models"></datalist><div id="models"></div><button id="add-model" class="secondary" type="button"><span data-icon="plus"></span><span data-copy="addModel"></span></button><label><span data-copy="defaultModel"></span><select name="defaultModel" required></select></label></div><p id="assignment-notice" class="dialog-notice" role="alert" hidden></p><div class="dialog-footer"><button id="inherit-assignment" class="secondary" type="button" data-copy="usePlatformDefault"></button><button id="cancel-assignment" class="secondary" type="button" data-close="assignment" data-copy="cancel"></button><button class="primary" data-copy="saveConfiguration"></button></div></form></dialog>
 </body></html>`
+}

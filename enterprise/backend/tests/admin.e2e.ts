@@ -151,7 +151,7 @@ it.each(['http', 'https'] as const)('manages employees through the independent %
   const employee = page.locator('#editor-form')
   await employee.getByLabel('Name', { exact: true }).fill('Alice')
   await employee.getByLabel('Email', { exact: true }).fill('alice@example.test')
-  await employee.getByLabel('Initial password (12+ characters)', { exact: true }).fill('test-alice-password')
+  await employee.getByLabel('Initial password (8+ characters)', { exact: true }).fill('test-alice-password')
   await employee.getByRole('button', { name: 'Create employee', exact: true }).click()
   let row = page.getByRole('row').filter({ hasText: 'alice@example.test' })
   await row.getByText('Models not assigned', { exact: true }).waitFor()

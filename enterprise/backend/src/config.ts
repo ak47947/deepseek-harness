@@ -40,7 +40,7 @@ const environmentSchema = z
       .optional(),
     DSH_ENTERPRISE_SESSION_SECONDS: z.coerce.number().int().min(60).max(2592000).default(86400),
     DSH_ENTERPRISE_BOOTSTRAP_EMAIL: z.email().optional(),
-    DSH_ENTERPRISE_BOOTSTRAP_PASSWORD: z.string().min(12).max(128).optional(),
+    DSH_ENTERPRISE_BOOTSTRAP_PASSWORD: z.string().min(8).max(128).optional(),
     DSH_ENTERPRISE_LITELLM_URL: z
       .url()
       .refine((value) => {

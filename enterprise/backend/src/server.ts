@@ -28,7 +28,7 @@ const employeeInput = z
   .object({
     email: z.email(),
     name: z.string().min(1).max(256),
-    password: z.string().min(12).max(128).optional(),
+    password: z.string().min(8).max(128).optional(),
     role: z.enum(['admin', 'user']),
   })
   .strict()
@@ -286,7 +286,7 @@ export class EnterpriseServer {
             ? 'text/javascript'
             : 'text/css',
       )
-      response.end(adminPage ? adminDocument : url.pathname.endsWith('.js') ? adminScript : adminStyles)
+      response.end(adminPage ? adminDocument(this.config.DSH_ENTERPRISE_PRODUCT_NAME) : url.pathname.endsWith('.js') ? adminScript : adminStyles)
       return
     }
     if (url.pathname === '/health' && request.method === 'GET') {
@@ -406,7 +406,7 @@ export class EnterpriseServer {
       return
     }
     const match =
-      /^\/v1\/admin\/employees\/([^/]+)\/(assignment|password|disable|retry-cleanup|role|budget|usage|department|oidc)$/u.exec(
+      /^\/v1\/admin\/employees\/([^/]+)\/(assignment|password|disable|retry-cleanup|role|budget|usage|department|oidc|profile)$/u.exec(
         url.pathname,
       )
     if (match === null) throw new EnterpriseRequestError(404)
@@ -436,13 +436,33 @@ export class EnterpriseServer {
       const configuration = inherit ? await this.store.platformDefault() : provisioningSchema.parse(input)
       if (configuration === null) throw new EnterpriseRequestError(409)
       await this.assignConfiguration(userId, await this.approvedConfiguration(configuration), inherit)
+    } else if (action === 'profile') {
+      const input = z
+        .object({
+          name: z.string().trim().min(1).max(256),
+          email: z.email(),
+          departmentId: departmentIdSchema.nullable().optional(),
+        })
+        .strict()
+        .parse(await body(request))
+      const existing = await this.database.query<{ id: string }>('SELECT id FROM "user" WHERE id = $1', [userId])
+      if (existing.rowCount === 0) throw new EnterpriseRequestError(404)
+      const conflict = await this.database.query<{ id: string }>(
+        'SELECT id FROM "user" WHERE lower(email) = lower($1) AND id <> $2',
+        [input.email, userId],
+      )
+      if ((conflict.rowCount ?? 0) > 0) throw new EnterpriseRequestError(409)
+      await this.auth.api.adminUpdateUser({ headers, body: { userId, data: { name: input.name, email: input.email } } })
+      if (input.departmentId !== undefined) {
+        await this.departments.assign(userId, input.departmentId)
+      }
     } else if (action === 'password') {
       if (!this.config.DSH_ENTERPRISE_PASSWORD_ENABLED) {
         const user = await this.database.query<{ role: string }>('SELECT role FROM "user" WHERE id = $1', [userId])
         if (user.rows[0]?.role !== 'admin') throw new EnterpriseRequestError(409)
       }
       const input = z
-        .object({ password: z.string().min(12).max(128) })
+        .object({ password: z.string().min(8).max(128) })
         .strict()
         .parse(await body(request))
       await this.auth.api.setUserPassword({ headers, body: { userId, newPassword: input.password } })
@@ -463,7 +483,7 @@ export class EnterpriseServer {
       return
     } else if (action === 'role') {
       const input = z
-        .object({ role: z.enum(['admin', 'user']), password: z.string().min(12).max(128).optional() })
+        .object({ role: z.enum(['admin', 'user']), password: z.string().min(8).max(128).optional() })
         .strict()
         .parse(await body(request))
       if (userId === employee.user.id) throw new EnterpriseRequestError(409)

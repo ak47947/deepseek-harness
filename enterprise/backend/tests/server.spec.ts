@@ -176,7 +176,7 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
   })
 
   it('serves the standalone administration page while protecting account data before login', async () => {
-    const { request } = await fixture()
+    const { request } = await fixture('basic', fetch, { DSH_ENTERPRISE_PRODUCT_NAME: 'Custom Enterprise Console' })
     for (const path of ['/admin', '/admin/', '/']) {
       const response = await request(path)
       expect(response.status).toBe(200)
@@ -185,6 +185,8 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
       expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'")
       const document = await response.text()
       expect(document).toContain('src="/admin/app.js"')
+      expect(document).toContain('Custom Enterprise Console')
+      expect(document).not.toContain('DeepSeek Harness')
       expect(document).not.toContain('admin@example.test')
     }
     for (const path of ['/admin/app.js', '/admin/app.css', '/app.js', '/app.css']) {
@@ -250,7 +252,41 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
     })
     expect(created.status).toBe(201)
     const { user } = (await created.json()) as { user: { id: string } }
-    const token = await login('alice@example.test', 'test-alice-password')
+
+    const tooShort = await request('/v1/admin/employees', admin, {
+      email: 'short@example.test',
+      name: 'Short',
+      role: 'user',
+      password: 'short77',
+    })
+    expect(tooShort.status).toBe(400)
+
+    const eightChar = await request('/v1/admin/employees', admin, {
+      email: 'eight@example.test',
+      name: 'Eight',
+      role: 'user',
+      password: '8charpwd',
+    })
+    expect(eightChar.status).toBe(201)
+
+    const profileRes = await request(`/v1/admin/employees/${user.id}/profile`, admin, {
+      name: 'Alice Updated',
+      email: 'alice-updated@example.test',
+    })
+    expect(profileRes.status).toBe(200)
+
+    const conflictRes = await request(`/v1/admin/employees/${user.id}/profile`, admin, {
+      name: 'Alice Updated',
+      email: 'eight@example.test',
+    })
+    expect(conflictRes.status).toBe(409)
+
+    const shortReset = await request(`/v1/admin/employees/${user.id}/password`, admin, { password: 'short77' })
+    expect(shortReset.status).toBe(400)
+    const validReset = await request(`/v1/admin/employees/${user.id}/password`, admin, { password: '8charpwd' })
+    expect(validReset.status).toBe(200)
+
+    const token = await login('alice-updated@example.test', '8charpwd')
     expect((await request('/v1/admin/employees', token)).status).toBe(403)
     expect((await request('/v1/session', token)).status).toBe(409)
     expect((await request(`/v1/admin/employees/${user.id}/assignment`, admin, provisioning)).status).toBe(200)
@@ -270,8 +306,8 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
     expect(
       (
         await request('/api/auth/sign-in/email', undefined, {
-          email: 'alice@example.test',
-          password: 'test-alice-password',
+          email: 'alice-updated@example.test',
+          password: '8charpwd',
         })
       ).status,
     ).toBe(403)

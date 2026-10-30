@@ -20,7 +20,7 @@ export function createEnterpriseAuth(database: Pool, config: EnterpriseConfig, o
     baseURL: config.DSH_ENTERPRISE_ORIGIN,
     secret: config.BETTER_AUTH_SECRET,
     trustedOrigins: [config.DSH_ENTERPRISE_ORIGIN],
-    emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 12, maxPasswordLength: 128 },
+    emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 8, maxPasswordLength: 128 },
     account: { accountLinking: { enabled: false, disableImplicitLinking: true }, updateAccountOnSignIn: false },
     user: { validateUserInfo: oidc.validateUserInfo },
     hooks: { before: oidc.before },

@@ -42,7 +42,7 @@ Deploy the enterprise backend with Docker Compose 2.24.4 or later. Start with [l
 
 Create a private deployment environment file from [the environment template](deploy/.env.example). Set `DSH_CLIENT_COMMIT_HASH` to the output of `git rev-parse HEAD` from the source checkout; the image excludes `.git` and needs this explicit source revision. Choose a permanent `DSH_ENTERPRISE_ID`, a cryptographically random `BETTER_AUTH_SECRET` of at least 32 characters, and a random hexadecimal `ENTERPRISE_POSTGRES_PASSWORD`. Compose supplies the container's PostgreSQL `DATABASE_URL`. Remote deployments require an HTTPS `DSH_ENTERPRISE_ORIGIN`; the local overlay supplies loopback HTTP for same-machine development.
 
-Configure the first administrator's email and a password of at least 12 characters through `DSH_ENTERPRISE_BOOTSTRAP_EMAIL` and `DSH_ENTERPRISE_BOOTSTRAP_PASSWORD`; these create an administrator only while the user table is empty. After initialization, remove bootstrap credentials from the environment file and recreate the backend container with the same Compose configuration.
+Configure the first administrator's email and a password of at least 8 characters through `DSH_ENTERPRISE_BOOTSTRAP_EMAIL` and `DSH_ENTERPRISE_BOOTSTRAP_PASSWORD`; these create an administrator only while the user table is empty. After initialization, remove bootstrap credentials from the environment file and recreate the backend container with the same Compose configuration.
 
 | Setting | Default | Purpose |
 |---|---|---|

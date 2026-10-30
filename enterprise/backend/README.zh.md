@@ -42,7 +42,7 @@ description: "运行和管理单企业账号与模型下发服务，配置企业
 
 从[环境变量模板](deploy/.env.example)创建私有部署环境文件。将 `DSH_CLIENT_COMMIT_HASH` 设为源码检出目录中 `git rev-parse HEAD` 的输出；镜像不包含 `.git`，需要显式提供源码版本标识。选择长期不变的 `DSH_ENTERPRISE_ID`、至少 32 个字符的密码学随机 `BETTER_AUTH_SECRET`，以及随机十六进制的 `ENTERPRISE_POSTGRES_PASSWORD`。Compose 提供容器内 PostgreSQL 的 `DATABASE_URL`。远程部署要求 HTTPS `DSH_ENTERPRISE_ORIGIN`；本机叠加配置提供回环 HTTP，仅用于同机开发。
 
-通过 `DSH_ENTERPRISE_BOOTSTRAP_EMAIL` 和 `DSH_ENTERPRISE_BOOTSTRAP_PASSWORD` 配置首个管理员的邮箱和至少 12 位的密码；仅用户表为空时创建管理员。初始化后，从环境文件移除引导凭证，再使用相同 Compose 配置重建后台容器。
+通过 `DSH_ENTERPRISE_BOOTSTRAP_EMAIL` 和 `DSH_ENTERPRISE_BOOTSTRAP_PASSWORD` 配置首个管理员的邮箱和至少 8 位的密码；仅用户表为空时创建管理员。初始化后，从环境文件移除引导凭证，再使用相同 Compose 配置重建后台容器。
 
 | 设置 | 默认值 | 用途 |
 |---|---|---|

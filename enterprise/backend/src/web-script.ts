@@ -143,6 +143,7 @@ function renderUsers() {
     if (state.oidcIssuer && user.role === 'user') list.append(action(t.oidcIdentity, () => { menu.open = false; editOidc(user); }));
     if (user.oidcIdentity) list.append(action(t.clearOidc, () => { menu.open = false; clearOidc(user); }, 'danger'));
     for (const [label, fn, disabled, danger] of [
+      [t.editEmployee, () => editEmployee(user), false, false],
       [t.changeDepartment, () => changeDepartment(user), false, false],
       [t.reset, () => resetPassword(user), false, false],
       [t.changeRole, () => changeRole(user), user.id === state.viewerId, false],
@@ -256,12 +257,25 @@ function createEmployee() {
   editor(t.createEmployee, state.passwordEnabled ? t.createEmployeeDescription : t.createOidcEmployeeDescription, body => {
     const name = field(t.name, 'name'); name.input.maxLength = 256;
     const email = field(t.email, 'email', 'email'); email.input.autocomplete = 'off';
-    const password = field(t.initialPassword, 'password', 'password'); password.input.minLength = 12; password.input.maxLength = 128; password.input.autocomplete = 'new-password';
+    const password = field(t.initialPassword, 'password', 'password'); password.input.minLength = 8; password.input.maxLength = 128; password.input.autocomplete = 'new-password';
     const role = field(t.role, 'role', 'select'); setOptions(role.input, [[t.employee, 'user'], [t.administrator, 'admin']], 'user');
     const updatePassword = () => { const enabled = state.passwordEnabled || role.input.value === 'admin'; password.wrapper.hidden = !enabled; password.input.disabled = !enabled; password.input.required = enabled; };
     role.input.addEventListener('change', updatePassword); updatePassword();
     body.append(name.wrapper, email.wrapper, password.wrapper, role.wrapper);
   }, data => mutation('/v1/admin/employees', data), t.createEmployee);
+}
+function editEmployee(user) {
+  editor(t.editEmployee, user.email, body => {
+    const name = field(t.name, 'name', 'text', user.name); name.input.maxLength = 256;
+    const email = field(t.email, 'email', 'email', user.email); email.input.autocomplete = 'off';
+    const select = field(t.department, 'departmentId', 'select'); select.input.required = false;
+    setOptions(select.input, [[t.unassigned, ''], ...departmentOptions()], user.departmentId || '');
+    body.append(name.wrapper, email.wrapper, select.wrapper);
+  }, data => mutation(employeePath(user, 'profile'), {
+    name: data.name.trim(),
+    email: data.email.trim(),
+    departmentId: data.departmentId || null,
+  }));
 }
 function editDepartment(department, parentId = null) {
   editor(department ? t.editDepartment : t.createDepartment, t.createDepartmentDescription, body => {
@@ -288,12 +302,12 @@ function clearOidc(user) {
   editor(t.clearOidc, user.name, body => body.append(node('p', '', t.confirmClearOidc)), () => mutation(employeePath(user, 'oidc'), { subject: null }), t.clearOidc, true);
 }
 function resetPassword(user) {
-  editor(t.reset, user.name + ' · ' + t.passwordDescription, body => { const password = field(t.newPassword, 'password', 'password'); password.input.minLength = 12; password.input.maxLength = 128; password.input.autocomplete = 'new-password'; body.append(password.wrapper); }, data => mutation(employeePath(user, 'password'), data));
+  editor(t.reset, user.name + ' · ' + t.passwordDescription, body => { const password = field(t.newPassword, 'password', 'password'); password.input.minLength = 8; password.input.maxLength = 128; password.input.autocomplete = 'new-password'; body.append(password.wrapper); }, data => mutation(employeePath(user, 'password'), data));
 }
 function changeRole(user) {
   editor(t.changeRole, user.name, body => {
     body.append(node('p', '', t.confirmRole + ' ' + (user.role === 'admin' ? t.administrator + ' → ' + t.employee : t.employee + ' → ' + t.administrator)));
-    if (user.role !== 'admin' && !state.passwordEnabled) { const password = field(t.initialPassword, 'password', 'password'); password.input.minLength = 12; password.input.maxLength = 128; password.input.autocomplete = 'new-password'; body.append(password.wrapper); }
+    if (user.role !== 'admin' && !state.passwordEnabled) { const password = field(t.initialPassword, 'password', 'password'); password.input.minLength = 8; password.input.maxLength = 128; password.input.autocomplete = 'new-password'; body.append(password.wrapper); }
   }, data => mutation(employeePath(user, 'role'), { role: user.role === 'admin' ? 'user' : 'admin', ...data }));
 }
 function disable(user) {
