@@ -208,11 +208,20 @@ export function createEnterpriseDesktop(config: EnterpriseDesktopConfig, operati
       })
       profileCommitted.resolve(undefined)
     },
-    async hostStarted(url: string, stop: () => Promise<void>): Promise<void> {
+    /**
+     * @param url - Authenticated local Host URL.
+     * @param cookie - Host authentication header retained only for this Host's lifetime.
+     * @param stop - Stops this Host if account authorization expired during startup.
+     * @returns Completion after authenticated model synchronization starts.
+     */
+    async hostStarted(url: string, cookie: string, stop: () => Promise<void>): Promise<void> {
       if (!account.authorized) { await stop(); throw new Error('Enterprise desktop: account expired during Host startup') }
-      const transport = this.browserSession
       updateModel = value => rotateEnterpriseModel(url,
-        (input, init) => transport.fetch(input instanceof URL ? input.href : input, init), value, () => account.authorized)
+        (input, init) => {
+          const headers = new Headers(init?.headers)
+          headers.set('cookie', cookie)
+          return fetch(input, { ...init, headers })
+        }, value, () => account.authorized)
       account.startSynchronization()
       powerMonitor.off('resume', sync)
       powerMonitor.on('resume', sync)

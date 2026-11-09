@@ -2,7 +2,7 @@
 
 DeepSeek Harness is an all-plugin Cordis agent harness. Read [docs/architecture.md](docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](docs/AGENTS.md) for documentation.
 
-Enterprise customization belongs in `enterprise/`; use plugins and bundles for Host/Client features and narrow Desktop lifecycle operations for pre-Host authentication. Preserve unconfigured upstream behavior; follow [enterprise/AGENTS.md](enterprise/AGENTS.md).
+Enterprise customization lives in `enterprise/`. Use plugins/bundles for Host/Client features and narrow Desktop lifecycle operations for pre-Host authentication. Preserve unconfigured upstream behavior ([rules](enterprise/AGENTS.md)).
 
 ## Pre-stable APIs and released Session data
 
@@ -18,7 +18,7 @@ Record each externally perceptible breaking change immediately in an [upgrade gu
 
 ```
 vendor/      Vendored Cordis (vendor/README.md)
-enterprise/  Enterprise customization: backend, protocol, plugins, bundle, and Desktop adapter
+enterprise/  Customization (enterprise/AGENTS.md)
 packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   core/                 agent/session API
   api/                  remote BFF
@@ -40,6 +40,7 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   compaction/           context compaction
   context/              request context
   subagent/             delegated agents
+  team/                 shared task coordination
   jobs/                 background jobs
   bundle/               profile bundles
   workflow/             workflow execution
@@ -105,8 +106,8 @@ pnpm run test:docs      # quick documentation checks (no build; doc-quick aggreg
 pnpm run website:build  # VitePress build (doubles as dead-link check)
 pnpm dsh --profile headless "task"  # run one task from source (needs DEEPSEEK_API_KEY)
 pnpm run demo:ptc -- "task"  # headless PTC mode run (needs key)
-pnpm run dev:desktop    # build artifacts, then launch enterprise Desktop; start:desktop skips the build
-make desktop|dev-desktop|build  # enterprise Desktop and build aliases
+pnpm run dev:desktop    # build and launch enterprise Desktop; start:desktop skips building
+make desktop|dev-desktop|build
 ```
 
 ### Host sandbox failures
@@ -159,6 +160,7 @@ Real-API tests/demos read `DEEPSEEK_API_KEY`, optional `DEEPSEEK_BASE_URL`, and 
 - **Create Agent Notes only for durable decision rationale;** mechanical/local edits are exempt, including local UI changes ([scope](.agents/notes/README.md#when-to-write-one)). Archived notes are frozen: never edit or treat them as current authority ([archive policy](.agents/notes/README.md#archiving-and-deletion)).
 - **Official plugin artwork:** use [dsh-official-plugin-artwork](.agents/skills/dsh-official-plugin-artwork/SKILL.md) for official and official experimental plugin icons; obtain designer approval before landing new glyphs.
 - **Client UI copy is locale-owned.** Route product text through typed dictionaries and `t` or localized primitive props; `verify-client-ui-i18n` rejects hardcoded copy ([decision](.agents/notes/implemented/architecture/2026-08-23-locale-owned-client-ui-copy.md)). English copy, including plugin titles, uses sentence case ([rule](.agents/skills/dsh-prose-standard/SKILL.md#required-coverage-by-prose-location)).
+- **UI changes:** use [dsh-client-ui-ux](.agents/skills/dsh-client-ui-ux/SKILL.md) as the design and review entry point; load its references only as needed.
 - **Testing policy** — [docs/testing.md](docs/testing.md). Every non-trivial model- or product-user-visible change updates a keyless recorded-session snapshot; [snapshot ownership](snapshots/AGENTS.md) reserves the top-level tree for session-driven cases and keeps other expected output owner-local. Fixtures replay on macOS/Linux; fix fixtures, not normalizers.
 - **Design each tool's UI presentation up front.** Host presenters stay pure; Web cards derive from raw events and persisted result metadata ([cookbook](docs/cookbook/adding-a-tool.md)).
 - **Plan unit, e2e, and snapshot coverage** for capability seams, lifecycle paths, and transcript output; include missing snapshot-harness support in the same change.

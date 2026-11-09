@@ -2,7 +2,7 @@
 /** Account views share registrant-owned identity while keeping local action feedback. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { allowAllAccess } from '@deepseek-ai/dsh-client-test-runtime'
+import { allowAllAccess, contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
 import { EnterpriseAccountSection } from '../src/client/AccountSection.tsx'
 import { EnterpriseBrand, EnterpriseBrandMark } from '../src/client/Brand.tsx'
 import { EnterpriseAccountMenu, type EnterpriseLauncherSnapshot } from '../src/client/AccountMenu.tsx'
@@ -24,6 +24,7 @@ const unusedHook = (() => {
 const kit = {
   close: () => {},
   ...allowAllAccess,
+  useContextMenu: contextMenuHook(),
   useSessions: unusedHook,
   useSessionStatus: unusedHook,
   usePanelInfo: unusedHook,
