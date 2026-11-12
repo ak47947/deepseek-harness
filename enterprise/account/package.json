@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-settings-enterprise-account",
-  "version": "0.2.1-rc.3",
+  "version": "0.2.2-rc.1",
   "private": true,
   "description": "Enterprise desktop account settings backed by the native shell",
   "type": "module",
@@ -72,6 +72,6 @@
     "directory": "enterprise/account"
   },
   "engines": {
-    "dsh": "0.2.1-rc.3"
+    "dsh": "0.2.2-rc.1"
   }
 }

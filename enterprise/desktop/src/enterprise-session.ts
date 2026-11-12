@@ -20,14 +20,14 @@ import {
 const cachedSchema = z.object({
   token: z.string().min(1),
   session: enterpriseSessionSchema,
-  ref: z.string().regex(/^DSH_ENT_KEY_[A-F0-9]{64}$/u),
-})
+  ref: z.string().regex(/^DSH_ENT_KEY_[A-F0-9]{64}$/u).nullable(),
+}).refine(value => (value.session.provisioning === null) === (value.ref === null))
 
 /** Electron and Host operations whose lifetime is owned by the shell. */
 export interface EnterpriseSessionOperations {
   encrypt(text: string): Buffer
   decrypt(bytes: Buffer): string
-  /** Credentials are written before provider settings; old references remain until the Host stops. */
+  /** Credentials precede provider settings; null provisioning removes the enterprise route. Old references remain until the Host stops. */
   update(session: EnterpriseSession): Promise<void>
   /** Stops the Host, clears credentials and renderer storage, then returns to sign-in. */
   invalidate(
@@ -108,15 +108,16 @@ export class DesktopEnterpriseSession {
     }
     const paths = enterpriseAccountPaths(this.root, stored.session)
     const credentials = await readCredentialDocument(paths.home)
-    const apiKey = credentials.refs[stored.ref]
+    const apiKey = stored.ref === null ? undefined : credentials.refs[stored.ref]
     this.account = { token: stored.token, session: stored.session }
-    if (this.expired() || apiKey === undefined) {
+    if (this.expired() || (stored.session.provisioning !== null && apiKey === undefined)) {
       await this.clearSaved()
       await writeEnterpriseCredentials(paths.home, {})
       this.account = undefined
       return false
     }
-    this.account.session = { ...stored.session, provisioning: { ...stored.session.provisioning, apiKey } }
+    if (stored.session.provisioning !== null && apiKey !== undefined)
+      this.account.session = { ...stored.session, provisioning: { ...stored.session.provisioning, apiKey } }
     try {
       this.account.session = await this.readSession(stored.token)
     } catch (error) {
@@ -331,8 +332,8 @@ export class DesktopEnterpriseSession {
     const { session, token } = this.account
     const cached = {
       token,
-      session: { ...session, provisioning: { ...session.provisioning, apiKey: 'stored-in-account-home' } },
-      ref: enterpriseCredentialRef(session),
+      session: { ...session, provisioning: session.provisioning === null ? null : { ...session.provisioning, apiKey: 'stored-in-account-home' } },
+      ref: session.provisioning === null ? null : enterpriseCredentialRef({ provisioning: session.provisioning }),
     }
     await writeFileAtomic(join(this.root, 'session.bin'), this.operations.encrypt(JSON.stringify(cached)), {
       mode: 0o600,

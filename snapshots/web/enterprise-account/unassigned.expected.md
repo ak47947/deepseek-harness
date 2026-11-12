@@ -1,0 +1,12 @@
+- dialog "Settings":
+  - text: Settings
+  - navigation:
+    - button "General"
+    - button "Enterprise account"
+    - button "Models"
+    - button "Built-in plugins"
+    - button "Agent presets"
+  - button "Open configuration file"
+  - button "Close"
+  - text: Example organization Alice alice@example.test No enterprise model assigned. Configure a model in model settings.
+  - button "Sign out"

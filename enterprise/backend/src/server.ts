@@ -10,13 +10,13 @@ import { z } from 'zod'
 import { createEnterpriseAuth, type EnterpriseAuth, type AuthenticatedEmployee } from './auth.ts'
 import type { EnterpriseConfig } from './config.ts'
 import { EnterpriseSecrets } from './secrets.ts'
-import { EnterpriseStore, type AssignmentRow } from './store.ts'
+import { EnterpriseStore, ModelConfigurationRequestError, type AssignmentRow } from './store.ts'
 import { LiteLlmGateway } from './litellm.ts'
 import { enterpriseSessionSchema, provisioningSchema, EnterpriseRequestError } from '@deepseek-ai/dsh-enterprise-protocol'
 import { adminDocument, adminScript, adminStyles } from './web.ts'
 import { EnterpriseDepartments, DepartmentRequestError, departmentIdSchema, departmentInputSchema } from './departments.ts'
 import { EnterpriseOidc, oidcSubjectSchema } from './oidc.ts'
-import type { EnterpriseUserId, Provisioning } from '@deepseek-ai/dsh-enterprise-protocol'
+import type { EnterpriseUserId, EnterpriseModelConfigurationId, Provisioning } from '@deepseek-ai/dsh-enterprise-protocol'
 import {
   authorizationDocument,
   authorizationScript,
@@ -32,6 +32,11 @@ const employeeInput = z
     role: z.enum(['admin', 'user']),
   })
   .strict()
+const configurationIdSchema = z.string().min(1).max(512).transform(value => value as EnterpriseModelConfigurationId)
+const savedConfigurationInput = z.object({
+  name: z.string().trim().min(1).max(256),
+  configuration: z.object({ ...provisioningSchema.shape, apiKey: provisioningSchema.shape.apiKey.optional() }).strict(),
+}).strict()
 const publicAuthPaths = new Set([
   '/api/auth/sign-in/email',
   '/api/auth/sign-out',
@@ -154,7 +159,7 @@ export class EnterpriseServer {
           }
           const status =
             error instanceof EnterpriseRequestError ? error.status : error instanceof z.ZodError ? 400 : 503
-          json(response, status, { error: { code: error instanceof DepartmentRequestError ? error.code : status === 503 ? 'service_unavailable' : 'request_rejected' } })
+          json(response, status, { error: { code: error instanceof DepartmentRequestError || error instanceof ModelConfigurationRequestError ? error.code : status === 503 ? 'service_unavailable' : 'request_rejected' } })
         })
         .finally(() => {
           this.requests.delete(pending)
@@ -307,13 +312,53 @@ export class EnterpriseServer {
       if (request.headers['sec-fetch-site'] === 'cross-site') throw new EnterpriseRequestError(403)
     }
     const employee = await this.employee(request, url.pathname.startsWith('/v1/admin/'))
+    if (url.pathname === '/v1/admin/model-configurations') {
+      if (request.method === 'GET') {
+        const configurations = await this.store.modelConfigurations()
+        json(response, 200, { configurations: configurations.map(record => ({ ...record, configuration: { ...record.configuration, apiKey: undefined } })) })
+      } else if (request.method === 'POST') {
+        const input = savedConfigurationInput.parse(await body(request))
+        const configuration = await this.approvedConfiguration(provisioningSchema.parse(input.configuration))
+        const id = await this.store.saveModelConfiguration(null, input.name, configuration)
+        json(response, 201, { id })
+      } else throw new EnterpriseRequestError(405)
+      return
+    }
+    const configurationMatch = /^\/v1\/admin\/model-configurations\/([^/]+)(\/(default|delete|publish|unpublish))?$/u.exec(url.pathname)
+    if (configurationMatch !== null) {
+      if (request.method !== 'POST') throw new EnterpriseRequestError(405)
+      const id = configurationIdSchema.parse(decodeURIComponent(configurationMatch[1] ?? ''))
+      const existing = await this.store.modelConfiguration(id)
+      if (configurationMatch[3] === 'default') {
+        z.object({}).strict().parse(await body(request))
+        await this.approvedConfiguration(existing.configuration)
+        await this.store.selectPlatformDefault(id)
+      } else if (configurationMatch[3] === 'delete') {
+        z.object({}).strict().parse(await body(request))
+        await this.store.removeModelConfiguration(id)
+      } else if (configurationMatch[3] === 'publish' || configurationMatch[3] === 'unpublish') {
+        z.object({}).strict().parse(await body(request))
+        if (configurationMatch[3] === 'publish') await this.approvedConfiguration(existing.configuration)
+        await this.store.publishModelConfiguration(id, configurationMatch[3] === 'publish')
+      } else {
+        const input = savedConfigurationInput.parse(await body(request))
+        const configuration = await this.approvedConfiguration(provisioningSchema.parse({ ...input.configuration, apiKey: input.configuration.apiKey ?? existing.configuration.apiKey }))
+        await this.store.saveModelConfiguration(id, input.name, configuration)
+      }
+      json(response, 200, { ok: true })
+      return
+    }
     if (url.pathname === '/v1/admin/platform-default') {
       if (request.method === 'GET') {
         const configuration = await this.store.platformDefault()
         json(response, 200, { configuration: configuration === null ? null : { ...configuration, apiKey: undefined } })
       } else if (request.method === 'POST') {
-        const configuration = await this.approvedConfiguration(provisioningSchema.parse(await body(request)))
-        await this.store.setPlatformDefault(configuration)
+        const input = await body(request)
+        if (z.object({ configurationId: z.null() }).strict().safeParse(input).success) await this.store.clearPlatformDefault()
+        else {
+          const configuration = await this.approvedConfiguration(provisioningSchema.parse(input))
+          await this.store.setPlatformDefault(configuration)
+        }
         json(response, 200, { ok: true })
       } else throw new EnterpriseRequestError(405)
       return
@@ -342,12 +387,12 @@ export class EnterpriseServer {
     }
     if (url.pathname === '/v1/session' && request.method === 'GET') {
       const assigned = await this.resolveAssignment(employee.user.id)
-      if (assigned === null || assigned.configuration.mode !== this.config.DSH_ENTERPRISE_MODE)
+      if (assigned !== null && assigned.configuration.mode !== this.config.DSH_ENTERPRISE_MODE)
         throw new EnterpriseRequestError(409)
-      if (this.gateway !== undefined && (assigned.gateway_state !== 'ready' || assigned.gateway_key === null))
+      if (this.gateway !== undefined && assigned !== null && (assigned.gateway_state !== 'ready' || assigned.gateway_key === null))
         throw new EnterpriseRequestError(409)
       const provisioning =
-        this.gateway === undefined
+        assigned === null ? null : this.gateway === undefined
           ? assigned.configuration
           : {
             ...assigned.configuration,
@@ -371,6 +416,7 @@ export class EnterpriseServer {
     }
     if (url.pathname === '/v1/admin/employees' && request.method === 'GET') {
       const platformDefault = await this.store.platformDefault()
+      const configurations = await this.store.modelConfigurations()
       const users = await this.database.query(
         `SELECT u.id, u.name, u.email, u.role, u.banned, m.department_id AS "departmentId",
           (SELECT a."accountId" FROM account a WHERE a."userId" = u.id AND a."providerId" = 'enterprise-oidc' LIMIT 1) AS "oidcAccountId"
@@ -382,12 +428,14 @@ export class EnterpriseServer {
           const identity = oidcAccountId === null ? null : z.tuple([z.string(), oidcSubjectSchema]).parse(JSON.parse(oidcAccountId))
           const assigned = await this.store.assignment(user.id)
           const inherited = assigned === null || assigned.uses_platform_default
-          const configuration = inherited ? platformDefault : assigned.configuration
+          const configuration = inherited ? platformDefault : assigned.configuration_id === null ? assigned.configuration
+            : configurations.find(record => record.id === assigned.configuration_id && record.published)?.configuration ?? null
           return {
             ...account,
             oidcIdentity: identity === null ? null : { issuer: identity[0], subject: identity[1] },
             assignment: configuration === null ? null : { ...configuration, apiKey: undefined },
             assignmentSource: inherited ? 'platform' : 'user',
+            configurationId: inherited ? null : assigned.configuration_id,
             gatewayState: assigned?.gateway_state ?? 'unconfigured',
             managedSince: assigned?.managed_since?.toISOString() ?? null,
           }
@@ -433,9 +481,16 @@ export class EnterpriseServer {
     } else if (action === 'assignment') {
       const input = await body(request)
       const inherit = z.object({ usePlatformDefault: z.literal(true) }).strict().safeParse(input).success
-      const configuration = inherit ? await this.store.platformDefault() : provisioningSchema.parse(input)
-      if (configuration === null) throw new EnterpriseRequestError(409)
-      await this.assignConfiguration(userId, await this.approvedConfiguration(configuration), inherit)
+      const selected = z.object({ configurationId: configurationIdSchema }).strict().safeParse(input)
+      const configurationId = selected.success ? selected.data.configurationId : null
+      const record = configurationId === null ? null : await this.store.modelConfiguration(configurationId)
+      if (record !== null && !record.published) throw new ModelConfigurationRequestError(409, 'model_not_published')
+      const configuration = inherit ? await this.store.platformDefault() : record === null ? provisioningSchema.parse(input) : record.configuration
+      const user = await this.database.query('SELECT id FROM "user" WHERE id = $1', [userId])
+      if (user.rowCount === 0) throw new EnterpriseRequestError(404)
+      if (inherit) await this.store.clearPersonalAssignment(userId)
+      if (configuration === null) await this.resolveAssignment(userId)
+      else await this.assignConfiguration(userId, await this.approvedConfiguration(configuration), inherit, configurationId)
     } else if (action === 'profile') {
       const input = z
         .object({
@@ -468,16 +523,27 @@ export class EnterpriseServer {
       await this.auth.api.setUserPassword({ headers, body: { userId, newPassword: input.password } })
       await this.auth.api.revokeUserSessions({ headers, body: { userId } })
     } else if (action === 'disable' || action === 'retry-cleanup') {
-      if (userId === employee.user.id) throw new EnterpriseRequestError(409)
-      await this.auth.api.banUser({ headers, body: { userId, banReason: 'Enterprise account disabled' } })
+      let disabled = action === 'disable'
+      if (disabled) {
+        if (userId === employee.user.id) throw new EnterpriseRequestError(409)
+        await this.auth.api.banUser({ headers, body: { userId, banReason: 'Enterprise account disabled' } })
+      }
       const assigned = await this.store.assignment(userId)
+      if (action === 'retry-cleanup') {
+        if (this.gateway === undefined || assigned?.gateway_state !== 'cleanup-required' || assigned.gateway_key === null)
+          throw new EnterpriseRequestError(409)
+        const users = await this.database.query<{ banned: boolean | null }>('SELECT banned FROM "user" WHERE id = $1', [userId])
+        const user = users.rows[0]
+        if (user === undefined) throw new EnterpriseRequestError(404)
+        disabled = user.banned === true
+      }
       if (this.gateway !== undefined && assigned?.gateway_key != null) {
         await this.store.gateway(userId, assigned.gateway_key, 'cleanup-required')
         await this.gateway.revoke(assigned.gateway_key)
         await this.store.gateway(userId, null, 'unconfigured')
       }
       json(response, 200, {
-        disabled: true,
+        disabled,
         upstreamRevocation: this.gateway === undefined ? 'provider-action-required' : 'complete',
       })
       return
@@ -513,10 +579,10 @@ export class EnterpriseServer {
     return { ...configuration, apiKey: 'server-managed', baseURL: `${this.config.DSH_ENTERPRISE_ORIGIN}/v1` }
   }
 
-  private async assignConfiguration(userId: string, configuration: Provisioning, inherited: boolean): Promise<void> {
+  private async assignConfiguration(userId: string, configuration: Provisioning, inherited: boolean, configurationId: EnterpriseModelConfigurationId | null = null): Promise<void> {
     const previous = await this.store.assignment(userId)
     // A failed gateway update leaves this account unavailable until its next explicit retry or inherited refresh.
-    await this.store.assign(userId, configuration, inherited)
+    await this.store.assign(userId, configuration, inherited, configurationId)
     if (this.gateway === undefined) return
     const key = previous?.gateway_key ?? this.gateway.allocateKey()
     await this.store.gateway(userId, key, 'unconfigured')
@@ -526,12 +592,23 @@ export class EnterpriseServer {
 
   private async resolveAssignment(userId: string): Promise<AssignmentRow | null> {
     const assigned = await this.store.assignment(userId)
-    if (assigned !== null && !assigned.uses_platform_default) return assigned
-    const configuration = await this.store.platformDefault()
-    if (configuration === null || configuration.mode !== this.config.DSH_ENTERPRISE_MODE) return null
+    if (assigned !== null && !assigned.uses_platform_default && assigned.configuration_id === null) return assigned
+    const inherited = assigned === null || assigned.uses_platform_default
+    const configurationId = inherited ? null : assigned.configuration_id
+    const record = configurationId === null ? null : await this.store.modelConfiguration(configurationId)
+    const configuration = configurationId === null ? await this.store.platformDefault() : record?.published ? record.configuration : null
+    if (configuration === null) {
+      if (this.gateway !== undefined && assigned?.gateway_key != null) {
+        await this.store.gateway(userId, assigned.gateway_key, 'cleanup-required')
+        await this.gateway.revoke(assigned.gateway_key)
+        await this.store.gateway(userId, null, 'unconfigured')
+      }
+      return null
+    }
+    if (configuration.mode !== this.config.DSH_ENTERPRISE_MODE) throw new EnterpriseRequestError(409)
     if (assigned === null || JSON.stringify(assigned.configuration) !== JSON.stringify(configuration) ||
       (this.gateway !== undefined && (assigned.gateway_state !== 'ready' || assigned.gateway_key === null))) {
-      await this.assignConfiguration(userId, await this.approvedConfiguration(configuration), true)
+      await this.assignConfiguration(userId, await this.approvedConfiguration(configuration), inherited, configurationId)
       return this.store.assignment(userId)
     }
     return assigned
@@ -564,8 +641,10 @@ export class EnterpriseServer {
       assigned.gateway_state !== 'ready'
     )
       throw new EnterpriseRequestError(403)
-    if (assigned.uses_platform_default &&
-      JSON.stringify(assigned.configuration) !== JSON.stringify(await this.store.platformDefault()))
+    const record = assigned.configuration_id === null ? null : await this.store.modelConfiguration(assigned.configuration_id)
+    const currentConfiguration = assigned.uses_platform_default ? await this.store.platformDefault()
+      : record === null ? assigned.configuration : record.published ? record.configuration : null
+    if (JSON.stringify(assigned.configuration) !== JSON.stringify(currentConfiguration))
       throw new EnterpriseRequestError(403)
     const input = z.looseObject({ model: z.string() }).parse(await body(request, 32 * 1024 * 1024))
     if (Object.keys(input).some(key => !modelFields.has(key))) throw new EnterpriseRequestError(400)

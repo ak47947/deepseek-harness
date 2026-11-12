@@ -9,7 +9,7 @@ import { initProfile, loadProfileDirectory, loadOptionalPatches, readProfileMani
 import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-official-bundles'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { parseCredentialsDocument } from '@deepseek-ai/dsh-credentials-local'
-import type { EnterpriseAccountKey, EnterpriseSession } from '@deepseek-ai/dsh-enterprise-protocol'
+import type { EnterpriseAccountKey, EnterpriseSession, Provisioning } from '@deepseek-ai/dsh-enterprise-protocol'
 
 /** Stable account location independent of names, email addresses, tokens, and model credentials. */
 export interface EnterpriseAccountPaths {
@@ -38,7 +38,7 @@ export function enterpriseAccountPaths(
  * @param session - Complete approved endpoint and credential.
  * @returns Content-addressed reference safe for in-flight calls to retain after rotation.
  */
-export function enterpriseCredentialRef(session: EnterpriseSession): string {
+export function enterpriseCredentialRef(session: { provisioning: Provisioning }): string {
   return `DSH_ENT_KEY_${createHash('sha256')
     .update(JSON.stringify([session.provisioning.baseURL, session.provisioning.apiKey]))
     .digest('hex')
@@ -47,15 +47,16 @@ export function enterpriseCredentialRef(session: EnterpriseSession): string {
 
 /**
  * @param session - Server configuration.
- * @returns The llm-pi-ai provider dictionary used both before startup and by live settings writes.
+ * @returns The enterprise provider dictionary, or an empty dictionary when the server assigns no model.
  */
 export function enterpriseProviders(session: EnterpriseSession) {
+  if (session.provisioning === null) return {}
   return {
     enterprise: {
       displayName: 'Enterprise',
       api: session.provisioning.api,
       baseURL: session.provisioning.baseURL,
-      apiKeyEnv: enterpriseCredentialRef(session),
+      apiKeyEnv: enterpriseCredentialRef({ provisioning: session.provisioning }),
       models: session.provisioning.models,
     },
   }
@@ -132,10 +133,12 @@ export async function prepareEnterpriseProfile(
     }
     const localConfiguration = z.record(z.string(), z.unknown()).parse(previous.find(row => row.id === 'llm-pi-ai')?.config ?? {})
     const localProviders = z.record(z.string(), z.unknown()).parse(localConfiguration.providers ?? {})
-    const providers = { ...localProviders, ...enterpriseProviders(session) }
+    const { enterprise: _managed, ...personalProviders } = localProviders
+    const providers = { ...personalProviders, ...enterpriseProviders(session) }
     const localDefault = z.looseObject({ provider: z.string().optional() }).parse(previous.find(row => row.id === 'agent-default-model')?.config ?? {})
-    const defaultModel = localDefault.provider !== undefined && localDefault.provider !== 'enterprise'
-      ? localDefault : { ...localDefault, provider: 'enterprise', model: session.provisioning.defaultModel }
+    const defaultModel = localDefault.provider !== undefined && localDefault.provider !== '' && localDefault.provider !== 'enterprise'
+      ? localDefault : session.provisioning === null ? { provider: '', model: '' }
+        : { ...localDefault, provider: 'enterprise', model: session.provisioning.defaultModel }
     const prompt = z.record(z.string(), z.unknown()).parse(previous.find(row => row.id === 'system-prompt')?.config ?? {})
     const personalPrompt = Object.fromEntries(Object.entries(prompt).filter(([key]) => key !== 'includeHarnessIdentity'))
     const owned = [
@@ -152,13 +155,13 @@ export async function prepareEnterpriseProfile(
       return insert.length === 0 ? [] : [{ ...row, insert }]
     })
     const text = dump([...patch, ...owned], { schema: entryListSchema, noRefs: true, lineWidth: -1 })
-    const refs = { [enterpriseCredentialRef(session)]: session.provisioning.apiKey }
+    const refs = session.provisioning === null ? {} : { [enterpriseCredentialRef({ provisioning: session.provisioning })]: session.provisioning.apiKey }
     await writeEnterpriseCredentials(paths.home, refs)
     await writeFileAtomic(filename, text, { mode: 0o600, dirMode: 0o700 })
     if ((await readFile(filename, 'utf8')) !== text)
       throw new Error('Enterprise desktop: model configuration verification failed')
     const credentials = await readCredentialDocument(paths.home)
-    if (credentials.refs[enterpriseCredentialRef(session)] !== session.provisioning.apiKey)
+    if (Object.entries(refs).some(([ref, key]) => credentials.refs[ref] !== key))
       throw new Error('Enterprise desktop: model credential verification failed')
   })
 }

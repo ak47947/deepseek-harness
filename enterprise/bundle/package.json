@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-enterprise-desktop",
   "description": "Enterprise Desktop account, branding, and model selection over the standard Web profile",
-  "version": "0.2.1-rc.3",
+  "version": "0.2.2-rc.1",
   "private": true,
   "repository": {
     "type": "git",
@@ -41,6 +41,6 @@
     "@deepseek-ai/dsh-app-boot": "workspace:*"
   },
   "engines": {
-    "dsh": "0.2.1-rc.3"
+    "dsh": "0.2.2-rc.1"
   }
 }

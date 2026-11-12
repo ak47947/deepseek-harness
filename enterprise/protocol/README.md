@@ -32,7 +32,7 @@ import { endpointSchema } from '@deepseek-ai/dsh-enterprise-protocol'
 const endpoint = endpointSchema.parse('https://models.example.test/v1')
 ```
 
-`endpointSchema` accepts HTTPS and loopback HTTP endpoints without embedded credentials, query parameters, or fragments. `enterpriseSessionSchema` validates the authenticated account response and its provisioning fields; invalid input rejects parsing. `EnterpriseRequestError` reports an HTTP status without retaining upstream response bodies or credentials.
+`endpointSchema` accepts HTTPS and loopback HTTP endpoints without embedded credentials, query parameters, or fragments. `enterpriseSessionSchema` validates the authenticated account response. Its required `provisioning` field is null when no enterprise model is assigned; Desktop then accepts personally configured models. A non-null route must pass `provisioningSchema`; invalid input rejects parsing. `EnterpriseRequestError` reports an HTTP status without retaining upstream response bodies or credentials.
 
 -----
 

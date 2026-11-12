@@ -32,7 +32,7 @@ import { endpointSchema } from '@deepseek-ai/dsh-enterprise-protocol'
 const endpoint = endpointSchema.parse('https://models.example.test/v1')
 ```
 
-`endpointSchema` 接受 HTTPS 与回环 HTTP 地址，拒绝内嵌凭证、查询参数或片段。`enterpriseSessionSchema` 校验已认证的账号响应及其模型下发字段；无效输入会使解析失败。`EnterpriseRequestError` 只报告 HTTP 状态，不保留上游响应正文或凭证。
+`endpointSchema` 接受 HTTPS 与回环 HTTP 地址，拒绝内嵌凭证、查询参数或片段。`enterpriseSessionSchema` 校验已认证的账号响应。必填的 `provisioning` 字段在未分配企业模型时为 null，Desktop 此时允许成员自行配置模型。非空路由须通过 `provisioningSchema` 校验；无效输入会使解析失败。`EnterpriseRequestError` 只报告 HTTP 状态，不保留上游响应正文或凭证。
 
 -----
 

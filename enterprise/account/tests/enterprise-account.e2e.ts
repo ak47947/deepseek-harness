@@ -64,6 +64,7 @@ it.skipIf(webSnapshotMode() === 'record')(
     const tripwire = watchConsole(page)
     await page.addInitScript(() => {
       let degraded = false
+      let mode = 'basic'
       let signOuts = 0
       const listeners = new Set<() => void>()
       Object.defineProperty(globalThis, 'dshDesktop', {
@@ -76,7 +77,7 @@ it.skipIf(webSnapshotMode() === 'record')(
               organization: 'Example organization',
               name: 'Alice',
               email: 'alice@example.test',
-              mode: 'basic',
+              mode,
               expiresAt: '2026-10-29T00:00:00.000Z',
               degraded,
             }),
@@ -96,6 +97,11 @@ it.skipIf(webSnapshotMode() === 'record')(
         value: {
           degrade: () => {
             degraded = true
+            for (const listener of listeners) listener()
+          },
+          unassign: () => {
+            mode = 'local'
+            degraded = false
             for (const listener of listeners) listener()
           },
           signOuts: () => signOuts,
@@ -149,6 +155,12 @@ it.skipIf(webSnapshotMode() === 'record')(
       await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd),
       webSnapshotMode(),
     )
+    await page.evaluate(() => {
+      ;(globalThis as typeof globalThis & { enterpriseTest: { unassign(): void } }).enterpriseTest.unassign()
+    })
+    await page.getByText('No enterprise model assigned. Configure a model in model settings.', { exact: true }).waitFor()
+    await compareOrRefreshGolden(join(expected, 'unassigned.expected.md'),
+      await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
     await page.getByRole('button', { name: 'Sign out', exact: true }).click()
     expect(
       await page.evaluate(() =>

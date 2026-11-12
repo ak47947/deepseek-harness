@@ -6,6 +6,8 @@ import type { Branded } from '@deepseek-ai/dsh-brand'
 export type EnterpriseId = Branded<'EnterpriseId'>
 /** Stable employee identity assigned by the authentication service. */
 export type EnterpriseUserId = Branded<'EnterpriseUserId'>
+/** Stable saved model-configuration identity assigned by the enterprise service. */
+export type EnterpriseModelConfigurationId = Branded<'EnterpriseModelConfigurationId'>
 /** Fixed-format account-directory identifier derived from authenticated IDs. */
 export type EnterpriseAccountKey = Branded<'EnterpriseAccountKey'>
 /** One short-lived browser authorization request. */
@@ -76,13 +78,13 @@ export const enterpriseSessionSchema = z
     email: z.email(),
     role: z.enum(['admin', 'user']),
     expiresAt: z.iso.datetime(),
-    provisioning: provisioningSchema,
+    provisioning: provisioningSchema.nullable(),
   })
   .strict()
 
 /** Model route stored as a platform default or an employee assignment. */
 export type Provisioning = z.infer<typeof provisioningSchema>
-/** Server-authenticated account and its complete model configuration. */
+/** Server-authenticated account; null provisioning requires a personally configured model in Desktop. */
 export type EnterpriseSession = z.infer<typeof enterpriseSessionSchema>
 
 /** Expected HTTP failures, safe for logs; upstream response bodies and tokens are excluded. */

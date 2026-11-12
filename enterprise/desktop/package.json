@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-enterprise-desktop-shell",
-  "version": "0.2.1-rc.3",
+  "version": "0.2.2-rc.1",
   "private": true,
   "type": "module",
   "description": "Enterprise Desktop authentication and account lifecycle adapter",

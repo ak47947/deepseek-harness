@@ -10,7 +10,7 @@ import { DesktopProjectManager } from '../../../apps/desktop/src/project-manager
 import { resolveDesktopPaths } from '../../../apps/desktop/src/paths.ts'
 import { enterpriseAccountPaths, enterpriseCredentialRef, prepareEnterpriseProfile, readCredentialDocument } from '../src/enterprise-profile.ts'
 import { rotateEnterpriseModel } from '../src/enterprise-rpc.ts'
-import { enterpriseSessionSchema, type EnterpriseSession } from '@deepseek-ai/dsh-enterprise-protocol'
+import { provisioningSchema, enterpriseSessionSchema, type EnterpriseSession } from '@deepseek-ai/dsh-enterprise-protocol'
 import { prepareDevelopmentProject } from '../../../apps/desktop/scripts/development-project.ts'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../../../apps/desktop/src/host-protocol.ts'
 
@@ -63,8 +63,43 @@ async function fixture(session: EnterpriseSession, sharedRoot?: string) {
   return { root, account, host, ready, send, rpc }
 }
 
+it('starts without a server model and retains personal models through assignment and removal', { retry: 0 }, async () => {
+  const session = enterpriseSessionSchema.parse({ enterpriseId: 'company', userId: 'unassigned', name: 'Alice', email: 'alice@example.test', role: 'user',
+    expiresAt: '2099-01-01T00:00:00.000Z', provisioning: null })
+  const { root, ready, send, rpc, account, host } = await fixture(session)
+  const summaries = []
+  const summarize = async () => {
+    const namespaces = z.object({ namespaces: z.array(z.object({ ns: z.string(), value: z.unknown() })) }).parse((await rpc('settings/describe', {})).value).namespaces
+    const providers = z.object({ providers: z.record(z.string(), z.unknown()) }).parse(namespaces.find(row => row.ns === 'llm-pi-ai')?.value).providers
+    return { providers: Object.keys(providers).sort(), default: namespaces.find(row => row.ns === 'agent-default-model')?.value }
+  }
+  summaries.push(await summarize())
+  const assigned = { ...session, provisioning: provisioningSchema.parse({ mode: 'basic', api: 'openai-completions', baseURL: 'https://provider.example.test/v1', apiKey: 'test-provider-key',
+    models: [{ id: 'approved', name: 'Approved', contextWindow: 128000, maxTokens: 8192, input: ['text'] }], defaultModel: 'approved' }) }
+  await rotateEnterpriseModel(ready.url, send, assigned, () => true)
+  summaries.push(await summarize())
+  await rotateEnterpriseModel(ready.url, send, session, () => true)
+  summaries.push(await summarize())
+  await rpc('settings/mutate', { ns: 'llm-pi-ai', ops: [{ op: 'set', path: ['providers', 'personal'], value: {
+    api: 'openai-completions', baseURL: 'https://personal.example.test/v1', apiKeyEnv: 'PERSONAL_KEY',
+    models: [{ id: 'personal-model', name: 'Personal model', contextWindow: 128000, maxTokens: 8192, input: ['text'] }],
+  } }] })
+  await rpc('credentials/set', { ref: 'PERSONAL_KEY', value: 'personal-test-key' })
+  await rpc('settings/update', { ns: 'agent-default-model', patch: { provider: 'personal', model: 'personal-model' } })
+  await rotateEnterpriseModel(ready.url, send, assigned, () => true)
+  summaries.push(await summarize())
+  await rotateEnterpriseModel(ready.url, send, session, () => true)
+  summaries.push(await summarize())
+  await expect(JSON.stringify(summaries, null, 2) + '\n').toMatchFileSnapshot('./expected/enterprise-unassigned-models.json')
+  await host.stop(true)
+  const restarted = await fixture(session, root)
+  expect(await readFile(join(account.profile, 'cordis.patch.yml'), 'utf8')).not.toContain('https://provider.example.test/v1')
+  expect((await readCredentialDocument(account.home)).refs).toEqual({ PERSONAL_KEY: 'personal-test-key' })
+  await restarted.host.stop(true)
+})
+
 it('boots the built enterprise profile and keeps old credential references during live endpoint rotation', { retry: 0 }, async () => {
-  const session = enterpriseSessionSchema.parse({ enterpriseId: 'company', userId: 'alice', name: 'Alice', email: 'alice@example.test', role: 'user', expiresAt: '2026-10-29T00:00:00.000Z',
+  const session = enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse({ enterpriseId: 'company', userId: 'alice', name: 'Alice', email: 'alice@example.test', role: 'user', expiresAt: '2026-10-29T00:00:00.000Z',
     provisioning: { mode: 'basic', api: 'openai-completions', baseURL: 'https://provider.example.test/v1', apiKey: 'initial-test-key',
       models: [{ id: 'approved', name: 'Approved', contextWindow: 128000, maxTokens: 8192, input: ['text'] }], defaultModel: 'approved' } })
   const { root, account, host, ready, send, rpc } = await fixture(session)
@@ -103,7 +138,7 @@ it('boots the built enterprise profile and keeps old credential references durin
 it('preserves each employee workspace and stored Session across account switching and Host restarts', { retry: 0 }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-enterprise-accounts-'))
   onTestFinished(() => rm(root, { recursive: true, force: true }))
-  const account = (userId: string) => enterpriseSessionSchema.parse({
+  const account = (userId: string) => enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse({
     enterpriseId: 'company', userId, name: userId, email: `${userId}@example.test`, role: 'user',
     expiresAt: '2099-01-01T00:00:00.000Z', provisioning: {
       mode: 'basic', api: 'openai-completions', baseURL: 'https://provider.example.test/v1', apiKey: `test-${userId}-key`,

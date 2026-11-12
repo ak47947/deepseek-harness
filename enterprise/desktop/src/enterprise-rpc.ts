@@ -43,10 +43,12 @@ export async function rotateEnterpriseModel(
     if (!result.success) throw new Error('Enterprise desktop: configuration synchronization was rejected')
     return result.data.result.value
   }
-  await invoke('credentials/set', { ref: enterpriseCredentialRef(session), value: session.provisioning.apiKey })
+  if (session.provisioning !== null)
+    await invoke('credentials/set', { ref: enterpriseCredentialRef({ provisioning: session.provisioning }), value: session.provisioning.apiKey })
   await invoke('settings/mutate', {
     ns: 'llm-pi-ai',
-    ops: [{ op: 'set', path: ['providers', 'enterprise'], value: enterpriseProviders(session).enterprise }],
+    ops: [session.provisioning === null ? { op: 'unset', path: ['providers', 'enterprise'] }
+      : { op: 'set', path: ['providers', 'enterprise'], value: enterpriseProviders(session).enterprise }],
   })
   const settings = z.object({ namespaces: z.array(z.object({
     ns: z.string(), revision: z.number(), value: z.unknown(),
@@ -54,8 +56,8 @@ export async function rotateEnterpriseModel(
   const defaults = settings.namespaces.find(namespace => namespace.ns === 'agent-default-model')
   if (defaults === undefined) throw new Error('Enterprise desktop: default model settings are unavailable')
   const selection = z.object({ provider: z.string() }).parse(defaults.value)
-  if (selection.provider === 'enterprise') await invoke('settings/update', {
+  if (selection.provider === 'enterprise' || selection.provider === '') await invoke('settings/update', {
     ns: 'agent-default-model', expectedRevision: defaults.revision,
-    patch: { provider: 'enterprise', model: session.provisioning.defaultModel },
+    patch: session.provisioning === null ? { provider: '', model: '' } : { provider: 'enterprise', model: session.provisioning.defaultModel },
   })
 }

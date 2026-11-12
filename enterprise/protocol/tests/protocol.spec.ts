@@ -14,6 +14,8 @@ it('accepts complete enterprise responses without loading either application', (
     expiresAt: '2026-10-30T12:00:00.000Z', provisioning,
   }
   expect(enterpriseSessionSchema.parse(response)).toEqual(response)
+  expect(enterpriseSessionSchema.parse({ ...response, provisioning: null }).provisioning).toBeNull()
+  expect(enterpriseSessionSchema.safeParse({ ...response, provisioning: undefined }).success).toBe(false)
   expect(new EnterpriseRequestError(401)).toMatchObject({ status: 401, message: 'Enterprise request failed (401)' })
 })
 

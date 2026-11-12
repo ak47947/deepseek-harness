@@ -1,0 +1,45 @@
+- dialog "Edit model":
+  - heading "Edit model" [level=2]
+  - paragraph: Save this model’s provider address, protocol, credentials, and capabilities.
+  - button "Close"
+  - text: Provider API address
+  - textbox "Provider API address": https://provider.example.test/v1
+  - text: API protocol
+  - combobox "API protocol":
+    - option "OpenAI chat completions" [selected]
+    - option "OpenAI responses"
+    - option "Anthropic messages"
+  - text: Provider key (leave blank to keep current key)
+  - textbox "Provider key (leave blank to keep current key)"
+  - group "Model name":
+    - text: Model name Model ID
+    - textbox "Model ID": legacy-a
+    - text: Display name
+    - textbox "Display name": Legacy A
+    - text: Context tokens
+    - spinbutton "Context tokens": "128000"
+    - text: Maximum output tokens
+    - spinbutton "Maximum output tokens": "8192"
+    - text: Input
+    - combobox "Input":
+      - option "Text" [selected]
+      - option "Text and image"
+  - group "Model name":
+    - text: Model name Model ID
+    - textbox "Model ID": legacy-b-updated
+    - text: Display name
+    - textbox "Display name": Legacy B
+    - text: Context tokens
+    - spinbutton "Context tokens": "128000"
+    - text: Maximum output tokens
+    - spinbutton "Maximum output tokens": "8192"
+    - text: Input
+    - combobox "Input":
+      - option "Text" [selected]
+      - option "Text and image"
+  - text: Default model
+  - combobox "Default model":
+    - option "legacy-a" [selected]
+    - option "legacy-b-updated"
+  - button "Cancel"
+  - button "Save model"

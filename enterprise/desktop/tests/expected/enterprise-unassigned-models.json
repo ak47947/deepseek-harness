@@ -1,0 +1,44 @@
+[
+  {
+    "providers": [],
+    "default": {
+      "provider": "",
+      "model": ""
+    }
+  },
+  {
+    "providers": [
+      "enterprise"
+    ],
+    "default": {
+      "provider": "enterprise",
+      "model": "approved"
+    }
+  },
+  {
+    "providers": [],
+    "default": {
+      "provider": "",
+      "model": ""
+    }
+  },
+  {
+    "providers": [
+      "enterprise",
+      "personal"
+    ],
+    "default": {
+      "provider": "personal",
+      "model": "personal-model"
+    }
+  },
+  {
+    "providers": [
+      "personal"
+    ],
+    "default": {
+      "provider": "personal",
+      "model": "personal-model"
+    }
+  }
+]

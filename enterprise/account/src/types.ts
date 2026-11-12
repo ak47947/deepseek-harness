@@ -3,7 +3,7 @@ export interface EnterpriseAccountView {
   readonly organization: string
   readonly name: string
   readonly email: string
-  readonly mode: 'basic' | 'managed'
+  readonly mode: 'basic' | 'managed' | 'local'
   readonly expiresAt: string
   readonly degraded: boolean
 }

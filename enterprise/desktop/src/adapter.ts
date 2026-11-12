@@ -239,7 +239,7 @@ export function createEnterpriseDesktop(config: EnterpriseDesktopConfig, operati
       handle(ENTERPRISE_IPC.account, () => {
         const current = account.session
         return current === undefined ? null : { organization: config.enterpriseName, name: current.name, email: current.email,
-          mode: current.provisioning.mode, expiresAt: current.expiresAt, degraded }
+          mode: current.provisioning?.mode ?? 'local', expiresAt: current.expiresAt, degraded }
       })
       handle(ENTERPRISE_IPC.signOut, async () => { if (await confirmQuit()) await account.signOut() })
       handle(ENTERPRISE_IPC.start, async () => {

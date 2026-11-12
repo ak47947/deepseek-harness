@@ -21,25 +21,25 @@
       - columnheader "Status"
       - columnheader "Actions"
   - rowgroup:
-    - row "Alice alice@example.test Engineering Employee Active Models":
+    - row "Alice alice@example.test Engineering Employee Active Assign model":
       - cell "Alice alice@example.test":
         - strong: Alice
         - text: alice@example.test
       - cell "Engineering"
       - cell "Employee"
       - cell "Active"
-      - cell "Models":
-        - button "Models"
+      - cell "Assign model":
+        - button "Assign model"
         - group
-    - row "Administrator admin@example.test Unassigned Administrator Models not assigned Models":
+    - row "Administrator admin@example.test Unassigned Administrator Active Assign model":
       - cell "Administrator admin@example.test":
         - strong: Administrator
         - text: admin@example.test
       - cell "Unassigned"
       - cell "Administrator"
-      - cell "Models not assigned"
-      - cell "Models":
-        - button "Models"
+      - cell "Active"
+      - cell "Assign model":
+        - button "Assign model"
         - group
 - text: 1–2 of 2 users
 - button "Previous" [disabled]

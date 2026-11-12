@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { composeEntries, loadOverlayPatches, readProfileManifest } from '@deepseek-ai/dsh-app-boot'
-import { enterpriseSessionSchema } from '@deepseek-ai/dsh-enterprise-protocol'
+import { provisioningSchema, enterpriseSessionSchema } from '@deepseek-ai/dsh-enterprise-protocol'
 import {
   enterpriseAccountPaths,
   enterpriseCredentialRef,
@@ -29,7 +29,7 @@ describe('enterprise profile preparation', () => {
   it('preserves account history and unrelated settings, and removes managed credentials only after the Host stops', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-enterprise-profile-'))
     roots.push(root)
-    const session = enterpriseSessionSchema.parse({
+    const session = enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse({
       enterpriseId: 'company',
       userId: 'alice',
       name: 'Alice',

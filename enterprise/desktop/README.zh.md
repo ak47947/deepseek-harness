@@ -53,7 +53,7 @@ pnpm run render:enterprise-brand-assets
 <details>
 <summary>实现内部细节——点击展开</summary>
 
-[`src/adapter.ts`](src/adapter.ts) 拥有原生账号生命周期，并通过 preload 桥发布不含凭据的账号信息。[`src/enterprise-profile.ts`](src/enterprise-profile.ts) 启用[企业组合包](../bundle/README.zh.md)，提供批准模型数据和配置的助手名称，同时保留个人提供者、个人默认模型和无关设置。动态模型轮换使用 Host 现有的凭据和设置 API，并显式传递仅对当前运行 Host 有效的认证 Cookie。
+[`src/adapter.ts`](src/adapter.ts) 拥有原生账号生命周期，并通过 preload 桥发布不含凭据的账号信息。[`src/enterprise-profile.ts`](src/enterprise-profile.ts) 启用[企业组合包](../bundle/README.zh.md)，提供批准模型数据和配置的助手名称，同时保留个人提供者、个人默认模型和无关设置。动态模型轮换使用 Host 现有的凭据和设置 API，并显式传递仅对当前运行 Host 有效的认证 Cookie。空模型下发会移除企业提供方及其默认选择，同时保留个人提供方、凭据和默认模型；已认证账号无需企业模型也能启动。
 
 适配器通过[企业协议库](../protocol/README.zh.md)定义的校验消息与[企业服务](../backend/README.zh.md)交换账号和模型配置。服务拥有认证和授权；原生适配器拥有本地账号数据选择和 Host 停机。Profile 初始化保留已有组合包列表，而账号准备加入企业层时不替换其他已安装组合包。
 

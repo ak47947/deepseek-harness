@@ -105,6 +105,9 @@ describe('enterprise account settings', () => {
     view.rerender(<EnterpriseAccountSection {...props} />)
     expect(screen.getByText(en.degraded)).toBeTruthy()
     expect(screen.getByText(en.managed)).toBeTruthy()
+    snapshot = { account: { ...account, mode: 'local' }, failed: false }
+    view.rerender(<EnterpriseAccountSection {...props} />)
+    expect(screen.getByText(en.local)).toBeTruthy()
     signOut.mockRejectedValueOnce(new Error('cleanup failed'))
     fireEvent.click(screen.getByRole('button', { name: en.signOut }))
     expect(await screen.findByText(en.failed)).toBeTruthy()

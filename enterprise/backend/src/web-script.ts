@@ -13,7 +13,7 @@ function preference(key, value) {
 }
 const language = new URLSearchParams(location.search).get('lang') || preference('enterprise-language') || (navigator.language.startsWith('zh') ? 'zh' : 'en');
 const t = copy[language === 'zh' ? 'zh' : 'en'];
-const state = { employees: [], departments: [], collapsedDepartments: new Set(), platformDefault: null, oidcIssuer: null, passwordEnabled: true, mode: 'basic', viewerId: '', page: 1, route: 'overview', revision: 0, editing: null };
+const state = { employees: [], departments: [], collapsedDepartments: new Set(), platformDefault: null, configurations: [], oidcIssuer: null, passwordEnabled: true, mode: 'basic', viewerId: '', page: 1, route: 'overview', revision: 0, editing: null };
 const routes = { overview: ['overview', 'overviewDescription'], users: ['userManagement', 'usersDescription'], departments: ['departments', 'departmentsDescription'], models: ['modelConfiguration', 'modelsDescription'], usage: ['budgetUsage', 'usageDescription'] };
 const paths = {
   command: 'M9 7V5a2 2 0 1 0-2 2h10a2 2 0 1 0-2-2v14a2 2 0 1 0 2-2H7a2 2 0 1 0 2 2V7',
@@ -58,10 +58,10 @@ function notice(message, error = false) {
   if ($('workspace').hidden) document.body.append(el); else $('content').insertBefore(el, $('page-overview'));
 }
 function lock() {
-  state.revision++; state.employees = []; state.departments = []; state.collapsedDepartments.clear(); state.platformDefault = null; state.viewerId = ''; state.editing = null;
+  state.revision++; state.employees = []; state.departments = []; state.collapsedDepartments.clear(); state.platformDefault = null; state.configurations = []; state.viewerId = ''; state.editing = null;
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   $('assignment-form').reset(); $('models').replaceChildren(); $('editor-fields').replaceChildren();
-  $('employees').replaceChildren(); $('departments').replaceChildren(); $('model-assignments').replaceChildren();
+  $('employees').replaceChildren(); $('departments').replaceChildren(); $('model-configurations').replaceChildren();
   $('recent-users').replaceChildren(); $('usage-result').replaceChildren();
   $('platform-default-summary').replaceChildren();
   $('profile-name').textContent = ''; $('profile-email').textContent = '';
@@ -104,10 +104,10 @@ function setOptions(select, options, selected = select.value) { select.replaceCh
 function employeePath(user, operation) { return '/v1/admin/employees/' + encodeURIComponent(user.id) + '/' + operation; }
 async function refresh() {
   const revision = ++state.revision;
-  const [data, departments, defaults] = await Promise.all([api('/v1/admin/employees'), api('/v1/admin/departments'), api('/v1/admin/platform-default')]);
+  const [data, departments, defaults, configurations] = await Promise.all([api('/v1/admin/employees'), api('/v1/admin/departments'), api('/v1/admin/platform-default'), api('/v1/admin/model-configurations')]);
   if (revision !== state.revision) return;
   state.employees = data.employees; state.departments = departments.departments; state.mode = data.mode; state.viewerId = data.viewerId; state.oidcIssuer = data.oidcIssuer; state.passwordEnabled = data.passwordEnabled;
-  state.platformDefault = defaults.configuration;
+  state.platformDefault = defaults.configuration; state.configurations = configurations.configurations;
   $('login').hidden = true; $('workspace').hidden = false;
   const viewer = state.employees.find(user => user.id === state.viewerId);
   $('profile-name').textContent = viewer?.name || t.administrator; $('profile-email').textContent = viewer?.email || '';
@@ -142,12 +142,13 @@ function renderUsers() {
     const list = node('div', 'row-menu-content');
     if (state.oidcIssuer && user.role === 'user') list.append(action(t.oidcIdentity, () => { menu.open = false; editOidc(user); }));
     if (user.oidcIdentity) list.append(action(t.clearOidc, () => { menu.open = false; clearOidc(user); }, 'danger'));
+    if (user.gatewayState === 'cleanup-required') list.append(action(t.retry, () => { menu.open = false; retryCleanup(user); }));
     for (const [label, fn, disabled, danger] of [
       [t.editEmployee, () => editEmployee(user), false, false],
       [t.changeDepartment, () => changeDepartment(user), false, false],
       [t.reset, () => resetPassword(user), false, false],
       [t.changeRole, () => changeRole(user), user.id === state.viewerId, false],
-      [user.gatewayState === 'cleanup-required' ? t.retry : t.disable, () => disable(user), user.id === state.viewerId || (user.banned && user.gatewayState !== 'cleanup-required'), true],
+      [t.disable, () => disable(user), user.id === state.viewerId || user.banned, true],
     ]) { if (label === t.reset && !state.passwordEnabled && user.role !== 'admin') continue; const button = action(label, () => { menu.open = false; fn(); }, danger ? 'danger' : ''); button.disabled = disabled; list.append(button); }
     menu.append(trigger, list); menu.addEventListener('focusout', event => { if (!menu.contains(event.relatedTarget)) menu.open = false; }); actions.append(menu);
     row.append(cell(identity(user)), cell(department ? department.name : t.unassigned, department ? '' : 'muted'), cell(role), cell(status(user)), cell(actions)); return row;
@@ -192,26 +193,27 @@ function renderDepartments() {
 }
 function renderModels() {
   $('platform-default-summary').textContent = state.platformDefault ? state.platformDefault.models.map(model => model.name).join(' · ') + ' · ' + state.platformDefault.defaultModel : t.platformDefaultMissing;
-  const configured = state.employees.filter(user => user.assignment); const modelIds = new Set(configured.flatMap(user => user.assignment.models.map(model => model.id)));
-  $('model-stats').replaceChildren(stat(t.uniqueModels, modelIds.size, t.uniqueModelsHint, 'boxes'), stat(t.configuredUsers, configured.length, t.configuredHint, 'shield'), stat(t.unconfiguredUsers, state.employees.length - configured.length, t.unconfiguredHint, 'users'));
   const search = $('model-search').value.trim().toLocaleLowerCase();
-  const users = state.employees.filter(user => (user.name + ' ' + user.email + ' ' + (user.assignment?.models.map(model => model.id + ' ' + model.name).join(' ') || '')).toLocaleLowerCase().includes(search));
-  $('model-assignments').replaceChildren(...users.map(user => {
-    const row = node('tr'); const models = node('div', 'badge-list');
-    if (user.assignment) user.assignment.models.forEach(model => models.append(badge(model.name))); else models.append(badge(t.unconfigured, 'warning'));
-    models.append(badge(user.assignmentSource === 'platform' ? t.platformDefault : t.personalAssignment, 'neutral'));
-    const endpoint = node('div'); endpoint.append(node('span', 'endpoint', user.assignment?.baseURL || '—'), node('small', 'protocol-label', user.assignment?.api || ''));
-    const actions = node('div', 'row-actions'); actions.append(action(t.configure, () => edit(user)));
-    row.append(cell(identity(user)), cell(models), cell(endpoint), cell(user.assignment?.defaultModel || '—'), cell(actions)); return row;
-  })); $('model-empty').hidden = users.length !== 0;
+  const records = state.configurations.filter(record => (record.name + ' ' + record.configuration.models.map(model => model.id + ' ' + model.name).join(' ')).toLocaleLowerCase().includes(search));
+  $('model-configurations').replaceChildren(...records.map(record => {
+    const row = node('tr'); const name = node('div', 'badge-list'); name.append(node('strong', '', record.name)); if (record.isDefault) name.append(badge(t.platformDefault, 'success'));
+    const models = node('div', 'badge-list'); record.configuration.models.forEach(model => models.append(badge(model.id)));
+    const endpoint = node('div'); endpoint.append(node('span', 'endpoint', record.configuration.baseURL), node('small', 'protocol-label', record.configuration.api));
+    const actions = node('div', 'row-actions'); const edit = action(t.editConfigurationAction, () => editConfiguration(record)); edit.setAttribute('aria-label', t.editConfiguration); actions.append(edit);
+    if (record.published && !record.isDefault) { const select = action(t.defaultConfigurationAction, () => setDefaultConfiguration(record)); select.setAttribute('aria-label', t.setDefaultConfiguration); actions.append(select); }
+    actions.append(action(record.published ? t.unpublishModel : t.publishModel, () => changePublication(record)));
+    const remove = action(t.deleteConfigurationAction, () => deleteConfiguration(record), 'text-button danger'); remove.setAttribute('aria-label', t.deleteConfiguration); remove.disabled = record.isDefault || state.employees.some(user => user.configurationId === record.id); actions.append(remove);
+    row.append(cell(name), cell(models), cell(endpoint), cell(badge(record.published ? t.published : t.unpublished, record.published ? 'success' : 'neutral')), cell(actions)); return row;
+  })); $('configuration-empty').hidden = records.length !== 0;
+
 }
 function navigate(focus = true) {
   const requested = location.hash.slice(1); state.route = Object.hasOwn(routes, requested) && (requested !== 'usage' || state.mode === 'managed') ? requested : 'overview';
   for (const name of Object.keys(routes)) $('page-' + name).hidden = name !== state.route;
   document.querySelectorAll('[data-route]').forEach(link => { if (link.dataset.route === state.route) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); link.title = t[routes[link.dataset.route][0]]; });
   $('page-title').textContent = $('breadcrumb').textContent = t[routes[state.route][0]]; $('page-description').textContent = t[routes[state.route][1]];
-  $('primary-action').hidden = state.route === 'usage'; $('primary-label').textContent = state.route === 'departments' ? t.createDepartment : state.route === 'models' ? t.modelConfiguration : t.createEmployee;
-  $('primary-action').onclick = () => state.route === 'departments' ? editDepartment() : state.route === 'models' ? chooseEmployee() : createEmployee();
+  $('primary-action').hidden = state.route === 'usage'; $('primary-label').textContent = state.route === 'departments' ? t.createDepartment : state.route === 'models' ? t.createConfiguration : t.createEmployee;
+  $('primary-action').onclick = () => state.route === 'departments' ? editDepartment() : state.route === 'models' ? run($('primary-action'), () => editConfiguration()) : createEmployee();
   closeMenus(); setMenu(false); if (focus && !$('workspace').hidden) $('page-title').focus();
 }
 function go(route) { if (location.hash === '#' + route) navigate(); else location.hash = route; }
@@ -311,43 +313,68 @@ function changeRole(user) {
   }, data => mutation(employeePath(user, 'role'), { role: user.role === 'admin' ? 'user' : 'admin', ...data }));
 }
 function disable(user) {
-  const cleanup = user.gatewayState === 'cleanup-required';
-  editor(cleanup ? t.retry : t.disable, user.name, body => body.append(node('p', '', t.confirmDisable)), () => mutation(employeePath(user, cleanup ? 'retry-cleanup' : 'disable'), {}, 'editor', result => result.upstreamRevocation === 'provider-action-required' ? t.revoke : t.saved), cleanup ? t.retry : t.disable, true);
+  editor(t.disable, user.name, body => body.append(node('p', '', t.confirmDisable)), () => mutation(employeePath(user, 'disable'), {}, 'editor', result => result.upstreamRevocation === 'provider-action-required' ? t.revoke : t.saved), t.disable, true);
 }
-function chooseEmployee() {
-  editor(t.chooseEmployee, t.chooseEmployeeDescription, body => { const user = field(t.employee, 'userId', 'select'); setOptions(user.input, state.employees.map(user => [user.name + ' · ' + user.email, user.id])); body.append(user.wrapper); }, async data => { const user = state.employees.find(user => user.id === data.userId); if (user) { $('editor').close(); await edit(user); } }, t.continue);
+function retryCleanup(user) {
+  editor(t.retry, user.name, body => body.append(node('p', '', t.confirmCleanup)), () => mutation(employeePath(user, 'retry-cleanup'), {}), t.retry);
 }
-async function edit(user) {
+function configurationPath(record) { return '/v1/admin/model-configurations/' + encodeURIComponent(record.id); }
+function edit(user) {
+  editor(user.name + ' · ' + t.configure, t.selectConfigurationDescription, body => {
+    const select = field(t.configure, 'configurationId', 'select'); select.input.required = false;
+    setOptions(select.input, [[t.usePlatformDefault, ''], ...state.configurations.filter(record => record.published || record.id === user.configurationId).map(record => [record.name + (record.published ? '' : ' · ' + t.unpublished), record.id])], user.configurationId || ''); body.append(select.wrapper);
+    if (!state.platformDefault) body.append(node('p', 'muted', t.platformDefaultMissing));
+  }, data => mutation(employeePath(user, 'assignment'), data.configurationId ? { configurationId: data.configurationId } : { usePlatformDefault: true }));
+}
+function setDefaultConfiguration(record) {
+  editor(t.setDefaultConfiguration, record.name, body => body.append(node('p', '', t.confirmDefaultConfiguration)), () => mutation(configurationPath(record) + '/default', {}));
+}
+function choosePlatformDefault() {
+  editor(t.configurePlatformDefault, t.platformDefaultDescription, body => {
+    const select = field(t.defaultModel, 'configurationId', 'select'); select.input.required = false;
+    setOptions(select.input, [[t.noDefaultModel, ''], ...state.configurations.filter(record => record.published).map(record => [record.name, record.id])], state.configurations.find(record => record.isDefault)?.id || ''); body.append(select.wrapper);
+    if (!state.configurations.length) body.append(node('p', 'muted', t.configurationEmptyDescription));
+  }, data => data.configurationId ? mutation('/v1/admin/model-configurations/' + encodeURIComponent(data.configurationId) + '/default', {}) : mutation('/v1/admin/platform-default', { configurationId: null }));
+}
+function changePublication(record) {
+  editor(record.published ? t.unpublishModel : t.publishModel, record.name, body => body.append(node('p', '', record.published ? t.confirmUnpublish : t.confirmPublish)), () => mutation(configurationPath(record) + (record.published ? '/unpublish' : '/publish'), {}));
+}
+function deleteConfiguration(record) {
+  editor(t.deleteConfiguration, record.name, body => body.append(node('p', '', t.confirmDeleteConfiguration)), () => mutation(configurationPath(record) + '/delete', {}), t.deleteConfiguration, true);
+}
+async function editConfiguration(record) {
   if (state.mode === 'managed') { const catalog = await api('/v1/admin/models'); $('gateway-models').replaceChildren(...catalog.models.map(id => new Option(id, id))); }
-  state.editing = user; const configuration = user ? user.assignment : state.platformDefault; const form = $('assignment-form'); form.reset(); $('models').replaceChildren(); $('assignment-notice').hidden = true;
-  $('assignment-title').textContent = user ? user.name + ' · ' + t.modelConfiguration : t.platformDefault;
-  $('inherit-assignment').hidden = !user; $('inherit-assignment').disabled = !state.platformDefault;
-  $('key-field').hidden = state.mode === 'managed'; form.elements.apiKey.required = state.mode === 'basic';
+  state.editing = record || null; const configuration = record?.configuration; const form = $('assignment-form'); form.reset(); $('models').replaceChildren(); $('assignment-notice').hidden = true;
+  $('assignment-title').textContent = record ? t.editConfiguration : t.createConfiguration;
+  $('key-field').hidden = state.mode === 'managed'; form.elements.apiKey.required = state.mode === 'basic' && !record;
+  $('provider-key-label').textContent = record ? t.providerKeyOptional : t.providerKey;
   form.elements.baseURL.value = configuration?.baseURL || location.origin + '/v1'; form.elements.baseURL.readOnly = state.mode === 'managed';
   form.elements.api.value = configuration?.api || 'openai-completions';
   for (const model of configuration?.models || [undefined]) addModel(model);
-  if (configuration) form.elements.defaultModel.value = configuration.defaultModel;
+  refreshDefaultModel(configuration?.models.findIndex(model => model.id === configuration.defaultModel) ?? 0);
   $('assignment').showModal();
 }
 function addModel(value = { id: '', name: '', contextWindow: 128000, maxTokens: 8192, input: ['text'] }) {
-  const group = node('fieldset'); group.append(node('legend', '', t.modelConfiguration));
+  const group = node('fieldset'); group.append(node('legend', '', t.configurationName));
   for (const [key, label, type] of [['id', t.modelId, 'text'], ['name', t.modelName, 'text'], ['contextWindow', t.context, 'number'], ['maxTokens', t.output, 'number']]) {
     const item = field(label, key, type, value[key]); if (type === 'number') item.input.min = '1'; else item.input.maxLength = 256;
-    if (key === 'id') { item.input.oninput = defaults; if (state.mode === 'managed') item.input.setAttribute('list', 'gateway-models'); } group.append(item.wrapper);
+    if (key === 'id') { item.input.oninput = () => refreshDefaultModel(); if (state.mode === 'managed') item.input.setAttribute('list', 'gateway-models'); } group.append(item.wrapper);
   }
   const input = field(t.input, 'input', 'select'); setOptions(input.input, [[t.text, 'text'], [t.image, 'image']], value.input.includes('image') ? 'image' : 'text');
-  group.append(input.wrapper, action(t.remove, () => { group.remove(); defaults(); }, 'text-button danger')); $('models').append(group); defaults();
+  group.append(input.wrapper); $('models').append(group);
 }
-function defaults() { const select = $('assignment-form').elements.defaultModel; setOptions(select, [...$('models').querySelectorAll('input[name=id]')].filter(input => input.value).map(input => [input.value, input.value])); }
-$('add-model').onclick = () => addModel();
+function refreshDefaultModel(index = $('assignment-form').elements.defaultModel.selectedIndex) {
+  const select = $('assignment-form').elements.defaultModel; const ids = [...$('models').querySelectorAll('input[name=id]')];
+  select.replaceChildren(...ids.map(input => new Option(input.value, input.value))); select.selectedIndex = Math.max(index, 0);
+  select.disabled = ids.length < 2; select.required = !select.disabled; $('default-model-field').hidden = select.disabled;
+}
 $('assignment').addEventListener('close', () => { $('assignment-form').reset(); $('models').replaceChildren(); state.editing = null; });
 $('editor').addEventListener('close', () => { $('editor-form').reset(); });
 $('assignment-form').onsubmit = event => { event.preventDefault(); run(event.submitter, async () => {
   const data = fields(event.target); const models = [...$('models').querySelectorAll('fieldset')].map(group => { const get = name => group.querySelector('[name=' + name + ']').value; return { id: get('id'), name: get('name'), contextWindow: Number(get('contextWindow')), maxTokens: Number(get('maxTokens')), input: get('input') === 'image' ? ['text', 'image'] : ['text'] }; });
-  await mutation(state.editing ? employeePath(state.editing, 'assignment') : '/v1/admin/platform-default', { mode: state.mode, baseURL: data.baseURL, api: data.api, apiKey: state.mode === 'managed' ? 'server-managed' : data.apiKey, models, defaultModel: data.defaultModel }, 'assignment');
+  await mutation(state.editing ? configurationPath(state.editing) : '/v1/admin/model-configurations', { name: models[0].name, configuration: { mode: state.mode, baseURL: data.baseURL, api: data.api, ...(state.mode === 'managed' ? { apiKey: 'server-managed' } : data.apiKey ? { apiKey: data.apiKey } : {}), models, defaultModel: models.length === 1 ? models[0].id : data.defaultModel } }, 'assignment');
 }); };
-$('configure-platform-default').onclick = () => run($('configure-platform-default'), () => edit(null));
-$('inherit-assignment').onclick = () => run($('inherit-assignment'), () => mutation(employeePath(state.editing, 'assignment'), { usePlatformDefault: true }, 'assignment'));
+$('configure-platform-default').onclick = choosePlatformDefault;
 $('expand-departments').onclick = () => { state.collapsedDepartments.clear(); renderDepartments(); };
 $('collapse-departments').onclick = () => { state.departments.forEach(d => state.collapsedDepartments.add(d.id)); renderDepartments(); };
 $('login-form').onsubmit = event => { event.preventDefault(); run(event.submitter, async () => { await api('/api/auth/sign-in/email', fields(event.target)); event.target.reset(); await refresh(); }); };

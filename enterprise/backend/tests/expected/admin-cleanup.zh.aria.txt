@@ -1,0 +1,7 @@
+- dialog "重试网关清理":
+  - heading "重试网关清理" [level=2]
+  - paragraph: Alice
+  - button "关闭"
+  - paragraph: 重试撤销该账号待清理的网关凭据？
+  - button "取消"
+  - button "重试网关清理"

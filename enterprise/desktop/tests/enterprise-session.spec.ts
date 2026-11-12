@@ -9,7 +9,7 @@ import {
   enterpriseCredentialRef,
   writeEnterpriseCredentials,
 } from '../src/enterprise-profile.ts'
-import { enterpriseSessionSchema, type EnterpriseSession } from '@deepseek-ai/dsh-enterprise-protocol'
+import { provisioningSchema, enterpriseSessionSchema, type EnterpriseSession } from '@deepseek-ai/dsh-enterprise-protocol'
 import { rotateEnterpriseModel } from '../src/enterprise-rpc.ts'
 import { DesktopBackendController } from '../../../apps/desktop/src/backend-controller.ts'
 
@@ -21,8 +21,8 @@ afterEach(async () => {
   for (const path of roots.splice(0)) await rm(path, { recursive: true, force: true })
 })
 
-function value(userId = 'alice', enterpriseId = 'company-a'): EnterpriseSession {
-  return enterpriseSessionSchema.parse({
+function value(userId = 'alice', enterpriseId = 'company-a') {
+  return enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse({
     enterpriseId,
     userId,
     name: 'Alice',
@@ -79,6 +79,24 @@ async function harness(overrides: Partial<EnterpriseSessionOperations> = {}, sen
 }
 
 describe('enterprise desktop accounts', () => {
+  it('restores an authenticated account without an enterprise credential and synchronizes model removal', async () => {
+    let next: EnterpriseSession = value()
+    const { root, session, operations } = await harness({}, async () => Response.json(next))
+    await session.acceptBrowserToken('test-login-token')
+    next = { ...next, provisioning: null }
+    await session.synchronize()
+    expect(operations.update).toHaveBeenCalledWith(next)
+    expect(operations.invalidate).not.toHaveBeenCalled()
+    await session.dispose()
+    const cached = JSON.parse(await readFile(join(root, 'session.bin'), 'utf8'))
+    expect(cached).toMatchObject({ session: { provisioning: null }, ref: null })
+    const restored = new DesktopEnterpriseSession(root, session.config, operations, async () => { throw new Error('offline') }, () => Date.parse('2026-10-27T00:00:00.000Z'))
+    sessions.push(restored)
+    expect(await restored.restore()).toBe(true)
+    expect(restored.session?.provisioning).toBeNull()
+    expect(operations.degraded).toHaveBeenCalledWith(true)
+  })
+
   it('declares the deployment origin so the account service accepts the request', async () => {
     const origins: (string | null)[] = []
     const send: typeof fetch = async (input, init) => {
@@ -195,7 +213,7 @@ describe('enterprise desktop accounts', () => {
     await vi.advanceTimersByTimeAsync(2500)
     expect(session.authorized).toBe(true)
     expect(operations.invalidate).not.toHaveBeenCalled()
-    expect(session.session?.provisioning.apiKey).toBe(initial.provisioning.apiKey)
+    expect(session.session?.provisioning?.apiKey).toBe(initial.provisioning.apiKey)
     release()
     await pending
     expect(session.session).toEqual(renewed)

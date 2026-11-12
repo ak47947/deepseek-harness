@@ -11,7 +11,7 @@ import pg from 'pg'
 import { expect, it, onTestFinished } from 'vitest'
 import { EnterpriseServer } from '../src/server.ts'
 import { resolveEnterpriseConfig } from '../src/config.ts'
-import { enterpriseSessionSchema } from '@deepseek-ai/dsh-enterprise-protocol'
+import { provisioningSchema, enterpriseSessionSchema } from '@deepseek-ai/dsh-enterprise-protocol'
 
 it.skipIf(process.env.DSH_ENTERPRISE_LITELLM_E2E !== '1')(
   'provisions, meters, limits, and revokes employee calls through LiteLLM v1.106.4',
@@ -159,10 +159,10 @@ it.skipIf(process.env.DSH_ENTERPRISE_LITELLM_E2E !== '1')(
     }
     const assigned = await request(`/v1/admin/employees/${user.id}/assignment`, admin, assignment)
     expect(assigned.status, await assigned.clone().text()).toBe(200)
-    const first = enterpriseSessionSchema.parse(
+    const first = enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(
       await (await request('/v1/session', await login('employee@example.test', 'test-employee-password'))).json(),
     )
-    const second = enterpriseSessionSchema.parse(
+    const second = enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(
       await (await request('/v1/session', await login('employee@example.test', 'test-employee-password'))).json(),
     )
     expect(first.provisioning.apiKey).not.toBe(second.provisioning.apiKey)

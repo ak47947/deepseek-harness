@@ -29,7 +29,7 @@ Show the current employee and organization in enterprise Desktop, and sign out t
 
 The enterprise shell inserts this plugin into each authenticated account's desktop profile. The configured organization name and employee identity appear in that workspace. Its preload must expose `dshDesktop.enterpriseAccount`; mounting the plugin in an ordinary browser fails explicitly. `agentName` is required and supplied from the desktop product name, defaulting to `Atrix Harness`. The shell disables the built-in harness identity; this plugin registers the shared enterprise identity for all agent presets and subagents.
 
-The account Settings section shows the employee name, email, operating mode, and synchronization state. Sign-out asks the native shell to inspect tasks, stops the Host, removes local credentials, clears renderer storage, and restarts at sign-in. Cancelling the task confirmation preserves the account. Read and sign-out failures remain visible with retry guidance. The sidebar displays the configured organization name without the official vendor mark.
+The account Settings section shows the employee name, email, operating mode, and synchronization state. When no enterprise model is assigned, it directs the employee to configure a model in model settings. Sign-out asks the native shell to inspect tasks, stops the Host, removes local credentials, clears renderer storage, and restarts at sign-in. Cancelling the task confirmation preserves the account. Read and sign-out failures remain visible with retry guidance. The sidebar displays the configured organization name without the official vendor mark.
 
 -----
 

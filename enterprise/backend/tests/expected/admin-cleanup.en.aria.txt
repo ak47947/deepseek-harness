@@ -1,0 +1,7 @@
+- dialog "Retry gateway cleanup":
+  - heading "Retry gateway cleanup" [level=2]
+  - paragraph: Alice
+  - button "Close"
+  - paragraph: Retry revoking obsolete gateway credentials for this account?
+  - button "Cancel"
+  - button "Retry gateway cleanup"

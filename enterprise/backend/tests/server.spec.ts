@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import { enterpriseSessionSchema } from '@deepseek-ai/dsh-enterprise-protocol'
+import { provisioningSchema, enterpriseSessionSchema } from '@deepseek-ai/dsh-enterprise-protocol'
 import { COVERAGE_TEST_TIMEOUT_ENV, coverageTestTimeoutOptions } from '../../../scripts/coverage-partitions.ts'
 import { EnterpriseDepartments } from '../src/departments.ts'
 import { fixture } from './fixtures/enterprise.ts'
@@ -52,11 +52,11 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
     const created = await request('/v1/admin/employees', admin, { name: 'Alice', email: 'alice@example.test', password: 'test-alice-password', role: 'user' })
     const { user } = z.object({ user: z.object({ id: z.string() }) }).parse(await created.json())
     const employee = await login('alice@example.test', 'test-alice-password')
-    expect((await request('/v1/session', employee)).status).toBe(409)
+    expect(enterpriseSessionSchema.parse(await (await request('/v1/session', employee)).json()).provisioning).toBeNull()
     expect((await request('/v1/admin/platform-default', employee, provisioning)).status).toBe(403)
     expect((await request('/v1/admin/platform-default', admin, { ...provisioning, defaultModel: 'missing' })).status).toBe(400)
     expect((await request('/v1/admin/platform-default', admin, provisioning)).status).toBe(200)
-    const session = async () => enterpriseSessionSchema.parse(await (await request('/v1/session', employee)).json())
+    const session = async () => enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(await (await request('/v1/session', employee)).json())
     expect((await session()).provisioning).toEqual(provisioning)
     const defaultText = await (await request('/v1/admin/platform-default', admin)).text()
     expect(defaultText).not.toContain(provisioning.apiKey)
@@ -77,7 +77,7 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
     expect((await session()).provisioning).toEqual(changed)
     expect((await request('/v1/admin/employees', admin, { name: 'Bob', email: 'bob@example.test', password: 'test-bob-password', role: 'user' })).status).toBe(201)
     const bob = await login('bob@example.test', 'test-bob-password')
-    expect(enterpriseSessionSchema.parse(await (await request('/v1/session', bob)).json()).provisioning).toEqual(changed)
+    expect(enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(await (await request('/v1/session', bob)).json()).provisioning).toEqual(changed)
   })
 
   it('refreshes inherited managed access with a private employee key and retries failed provisioning', async () => {
@@ -106,14 +106,14 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
     expect((await request('/v1/session', employee)).status).toBe(503)
     expect((await server.store.assignment(user.id))?.gateway_state).toBe('unconfigured')
     failProvision = false
-    const session = enterpriseSessionSchema.parse(await (await request('/v1/session', employee)).json())
+    const session = enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(await (await request('/v1/session', employee)).json())
     expect(session.provisioning.apiKey).toMatch(/^entm_/u)
     expect(session.provisioning.apiKey).not.toBe(key)
     expect((await request('/v1/chat/completions', session.provisioning.apiKey, { model: 'approved-model' })).status).toBe(200)
     const previousKey = key
     expect((await request('/v1/admin/platform-default', admin, { ...provisioning, mode: 'managed', models: [{ ...provisioning.models[0], id: 'next-model' }], defaultModel: 'next-model' })).status).toBe(200)
     expect((await request('/v1/chat/completions', session.provisioning.apiKey, { model: 'approved-model' })).status).toBe(403)
-    expect(enterpriseSessionSchema.parse(await (await request('/v1/session', employee)).json()).provisioning.defaultModel).toBe('next-model')
+    expect(enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(await (await request('/v1/session', employee)).json()).provisioning.defaultModel).toBe('next-model')
     expect(key).toBe(previousKey)
     expect((await request('/v1/chat/completions', session.provisioning.apiKey, { model: 'approved-model' })).status).toBe(403)
     expect((await request('/v1/chat/completions', session.provisioning.apiKey, { model: 'next-model' })).status).toBe(200)
@@ -288,11 +288,12 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
 
     const token = await login('alice-updated@example.test', '8charpwd')
     expect((await request('/v1/admin/employees', token)).status).toBe(403)
-    expect((await request('/v1/session', token)).status).toBe(409)
+    expect(enterpriseSessionSchema.parse(await (await request('/v1/session', token)).json()).provisioning).toBeNull()
     expect((await request(`/v1/admin/employees/${user.id}/assignment`, admin, provisioning)).status).toBe(200)
+    expect((await request(`/v1/admin/employees/${user.id}/retry-cleanup`, admin, {})).status).toBe(409)
     const response = await request('/v1/session', token)
     expect(response.status).toBe(200)
-    const session = enterpriseSessionSchema.parse(await response.json())
+    const session = enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(await response.json())
     expect(session.userId).toBe(user.id)
     expect(session.provisioning).toEqual(provisioning)
     const saved = await pool.query<{ configuration: string }>('SELECT configuration FROM enterprise_assignment')
@@ -390,9 +391,10 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
     ).toBe(200)
     expect(calls.filter(call => call.path === '/key/generate')).toHaveLength(1)
     const firstLogin = await login('bob@example.test', 'test-bob-password')
-    const first = enterpriseSessionSchema.parse(await (await request('/v1/session', firstLogin)).json())
-    const second = enterpriseSessionSchema.parse(
-      await (await request('/v1/session', await login('bob@example.test', 'test-bob-password'))).json(),
+    const first = enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(await (await request('/v1/session', firstLogin)).json())
+    const secondLogin = await login('bob@example.test', 'test-bob-password')
+    const second = enterpriseSessionSchema.extend({ provisioning: provisioningSchema }).parse(
+      await (await request('/v1/session', secondLogin)).json(),
     )
     expect(first.provisioning.apiKey).not.toBe(second.provisioning.apiKey)
     expect(first.provisioning.apiKey).not.toContain('virtual-key')
@@ -455,6 +457,12 @@ describe('enterprise service', { timeout: Math.max(30_000, coverageTestTimeoutOp
     }
     expect(listing.employees.find(employee => employee.id === user.id)?.gatewayState).toBe('cleanup-required')
     failRevocation = false
-    expect((await request(`/v1/admin/employees/${user.id}/retry-cleanup`, admin, {})).status).toBe(200)
+    const cleanup = await request(`/v1/admin/employees/${user.id}/retry-cleanup`, admin, {})
+    expect(cleanup.status).toBe(200)
+    expect(await cleanup.json()).toEqual({ disabled: true, upstreamRevocation: 'complete' })
+    const cleaned = z.object({ employees: z.array(z.object({ id: z.string(), banned: z.boolean(), gatewayState: z.string() })) })
+      .parse(await (await request('/v1/admin/employees', admin)).json())
+    expect(cleaned.employees.find(employee => employee.id === user.id)).toMatchObject({ banned: true, gatewayState: 'unconfigured' })
+    expect((await request('/v1/session', secondLogin)).status).toBe(401)
   })
 })

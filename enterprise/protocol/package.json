@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-enterprise-protocol",
   "description": "Validated enterprise account and model provisioning exchanged by Desktop and the enterprise service",
-  "version": "0.2.1-rc.3",
+  "version": "0.2.2-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
